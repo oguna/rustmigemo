@@ -79,23 +79,25 @@ impl<'a> Iterator for QueryIter<'a> {
         let c = bytes[self.cursor];
         if 0x41 <= c && c <= 0x5a {
             // 大文字なら、大文字または小文字が続くまで
-            let mut next_char = bytes[self.cursor + 1];
-            if 0x41 <= next_char && next_char <= 0x5a {
-                while 0x41 <= next_char && next_char <= 0x5a {
-                    self.cursor = self.cursor + 1;
-                    if self.cursor + 1 < bytes.len() {
-                        next_char = bytes[self.cursor + 1];
-                    } else {
-                        break;
+            if self.cursor + 1 < bytes.len() {
+                let mut next_char = bytes[self.cursor + 1];
+                if 0x41 <= next_char && next_char <= 0x5a {
+                    while 0x41 <= next_char && next_char <= 0x5a {
+                        self.cursor = self.cursor + 1;
+                        if self.cursor + 1 < bytes.len() {
+                            next_char = bytes[self.cursor + 1];
+                        } else {
+                            break;
+                        }
                     }
-                }
-            } else if 0x61 <= next_char && next_char <= 0x7a {
-                while 0x61 <= next_char && next_char <= 0x7a {
-                    self.cursor = self.cursor + 1;
-                    if self.cursor + 1 < bytes.len() {
-                        next_char = bytes[self.cursor + 1];
-                    } else {
-                        break;
+                } else if 0x61 <= next_char && next_char <= 0x7a {
+                    while 0x61 <= next_char && next_char <= 0x7a {
+                        self.cursor = self.cursor + 1;
+                        if self.cursor + 1 < bytes.len() {
+                            next_char = bytes[self.cursor + 1];
+                        } else {
+                            break;
+                        }
                     }
                 }
             }
@@ -103,13 +105,15 @@ impl<'a> Iterator for QueryIter<'a> {
             return Some(&self.string[start..self.cursor]);
         } else if 0x61 <= c && c <= 0x7a {
             // 小文字なら、小文字が続くまで
-            let mut next_char = bytes[self.cursor + 1];
-            while 0x61 <= next_char && next_char <= 0x7a {
-                self.cursor = self.cursor + 1;
-                if self.cursor + 1 < bytes.len() {
-                    next_char = bytes[self.cursor + 1];
-                } else {
-                    break;
+            if self.cursor + 1 < bytes.len() {
+                let mut next_char = bytes[self.cursor + 1];
+                while 0x61 <= next_char && next_char <= 0x7a {
+                    self.cursor = self.cursor + 1;
+                    if self.cursor + 1 < bytes.len() {
+                        next_char = bytes[self.cursor + 1];
+                    } else {
+                        break;
+                    }
                 }
             }
             self.cursor = self.cursor + 1;
@@ -160,6 +164,30 @@ mod tests {
         assert_eq!(iter.next(), Some("nagoya"));
         assert_eq!(iter.next(), Some("FUKUOKA"));
         assert_eq!(iter.next(), Some("hokkaido"));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_parse_query_1() {
+        let query = "a";
+        let mut iter = parse_query(query);
+        assert_eq!(iter.next(), Some("a"));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_parse_query_2() {
+        let query = "A";
+        let mut iter = parse_query(query);
+        assert_eq!(iter.next(), Some("A"));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_parse_query_3() {
+        let query = "あ";
+        let mut iter = parse_query(query);
+        assert_eq!(iter.next(), Some("あ"));
         assert_eq!(iter.next(), None);
     }
 }
