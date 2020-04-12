@@ -12,3 +12,8 @@ getopts = "0.2"
 
 [dev-dependencies]
 rand = "0.7"
+
+[lib]
+name = "rustmigemo"
+path = "src/lib.rs"
+crate-type = ["cdylib"]
