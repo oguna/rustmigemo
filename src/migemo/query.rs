@@ -70,6 +70,10 @@ impl<'a> Iterator for QueryIter<'a> {
         while self.cursor < bytes.len() && bytes[self.cursor] == 0x20 {
             self.cursor = self.cursor + 1;
         }
+        // スキップした結果カーソルが終端に達してないか確認
+        if bytes.len() <= self.cursor {
+            return None;
+        }
         // 単語の先頭文字の種類で場合分け
         let start = self.cursor;
         let c = bytes[self.cursor];
@@ -149,7 +153,7 @@ mod tests {
 
     #[test]
     fn test_parse_query() {
-        let query = "toukyouOosaka nagoyaFUKUOKAhokkaido";
+        let query = "toukyouOosaka nagoyaFUKUOKAhokkaido ";
         let mut iter = parse_query(query);
         assert_eq!(iter.next(), Some("toukyou"));
         assert_eq!(iter.next(), Some("Oosaka"));
