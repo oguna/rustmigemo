@@ -160,7 +160,7 @@ impl LoudsTrie {
 
         let num_of_nodes = current_node;
         let mut bit_vector_words =
-            vec![0; (((num_of_children + num_of_nodes as u32 + 63 + 1) >> 6) * 2) as usize];
+            vec![0; ((num_of_children + num_of_nodes as u32 + 63 + 1) / 64) as usize];
         let mut bit_vector_index = 1;
         bit_vector_words[0] = 1;
         for i in 1..=current_node {
@@ -211,7 +211,7 @@ mod tests {
         println!("{:?}", x);
         let actual = trie.get(&"box".encode_utf16().collect());
         assert_eq!(actual, Some(10));
-        assert_eq!(trie.bit_vector.words, vec![1145789805, 0]);
+        assert_eq!(trie.bit_vector.words, vec![1145789805]);
         assert_eq!(trie.bit_vector.size_in_bits, 32);
         assert_eq!(trie.edges, vec![48, 48, 98, 100, 97, 111, 97, 98, 100, 110, 120, 100, 110, 121,107, 99, 101]);
     }
