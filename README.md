@@ -2,6 +2,17 @@
 
 ローマ字のまま日本語をインクリメンタル検索するためのツールであるMigemoを、Rustで実装したものです。
 
+Browser用ビルド
+```shell
+wasm-pack build
+```
+
+Node.js用ビルド
+
+```shell
+wasm-pack buld -t nodejs
+```
+
 ## C/Migemo・gomigemoとの比較
 
 | 項目 | C/Migemo | gomigemo | rustmigemo |
