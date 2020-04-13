@@ -2,6 +2,42 @@
 
 ローマ字のまま日本語をインクリメンタル検索するためのツールであるMigemoを、Rustで実装したものです。
 
+## dev-windllブランチ
+
+Windows用のDLLを作成するためのブランチです。
+
+### ビルド方法
+
+次のコマンドを実行すると、`target/release/rustmigemo.dll` が生成されます。
+
+```shell
+> cargo buld --release
+```
+
+### 使い方
+
+DLLを利用するプログラムの実装例として、`MigemoConsole.cpp`、`MigemoConsole.cs`を用意しています。
+
+| 関数名 | 引数 | 返り値 |
+| ---- | ---- | ---- |
+| load | 辞書データへのポインタ, 辞書データの長さ | Migemoデータ |
+| queyr | Migemoデータへのポインタ, 単語へのポインタ, 単語の長さ | void |
+| destroy | Migemoデータへのポインタ | void |
+
+Migemoデータは下表のような構造体です。
+
+```rust
+pub struct Migemo {
+    dict: *mut CompactDictionary,
+    result_ptr: *mut c_char,
+    result_len: u32,
+}
+```
+
+`query`関数へ渡す単語はutf-8でエンコードされた配列です。
+関数実行後、Migemoの結果へのポインタが`result_ptr`へ、結果の長さが`result_len`に格納されます。
+このポインタは次の`query`が呼ばれるまで、または`destroy`が呼ばれるまで有効です。
+
 ## C/Migemo・gomigemoとの比較
 
 | 項目 | C/Migemo | gomigemo | rustmigemo |
