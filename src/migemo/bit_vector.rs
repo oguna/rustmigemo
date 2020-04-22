@@ -58,9 +58,9 @@ impl BitVector {
         let count_in_lb: usize = if b {
             count - self.lb[lb_index as usize] as usize
         } else {
-            count - (512 * lb_index - self.lb[lb_index as usize] as u32) as usize
+            count - (512 * lb_index - self.lb[lb_index as usize] as usize) as usize
         };
-        let sb_index = self.lower_bound_binary_search_sb(count_in_lb as u32, lb_index as usize * 8, lb_index as usize * 8 + 8, b) - 1;
+        let sb_index = self.lower_bound_binary_search_sb(count_in_lb as u16, lb_index as usize * 8, lb_index as usize * 8 + 8, b) - 1;
         let count_in_sb = if b {
             count_in_lb - self.sb[sb_index] as usize
         } else {
@@ -107,29 +107,51 @@ impl BitVector {
         return i - 1;
     }
     
-    fn lower_bound_binary_search_lb(&self, key: u32, b: bool) -> u32 {
+    fn lower_bound_binary_search_lb(&self, key: u32, b: bool) -> usize {
         let mut high = self.lb.len() as isize;
         let mut low: isize = -1;
-        while high - low > 1 {
-            let mid = (high + low) >> 1;
-            if (b && self.lb[mid as usize] < key) || (!b && 512 * mid - (self.lb[mid as usize] as isize) < key as isize) {
-                low = mid;
-            } else {
-                high = mid;
+        if b {
+            while high - low > 1 {
+                let mid = (high + low) / 2;
+                if self.lb[mid as usize] < key {
+                    low = mid;
+                } else {
+                    high = mid;
+                }
+            }
+        } else {
+            while high - low > 1 {
+                let mid = (high + low) / 2;
+                if ((mid << 9) as u32) - self.lb[mid as usize] < key {
+                    low = mid
+                } else {
+                    high = mid
+                }
             }
         }
-        return high as u32;
+        return high as usize;
     }
 
-    fn lower_bound_binary_search_sb(&self, key: u32, from_index: usize, to_index: usize, b: bool) -> usize {
-        let mut high = to_index as i32;
-        let mut low: i32 = from_index as i32 - 1;
-        while high - low > 1 {
-            let mid = (high + low) >> 1;
-            if (b && self.sb[mid as usize] < key as u16) || (!b && 64 * (mid & 7) - (self.sb[mid as usize] as i32) < key as i32) {
-                low = mid;
-            } else {
-                high = mid;
+    fn lower_bound_binary_search_sb(&self, key: u16, from_index: usize, to_index: usize, b: bool) -> usize {
+        let mut high = to_index as isize;
+        let mut low = from_index as isize - 1;
+        if b {
+            while high-low > 1 {
+                let mid = (high + low) / 2;
+                if self.sb[mid as usize] < key {
+                    low = mid;
+                } else {
+                    high = mid;
+                }
+            }
+        } else {
+            while high-low > 1 {
+                let mid = (high + low) >> 1;
+                if (((mid&7) <<6) as u16)-self.sb[mid as usize] < key {
+                    low = mid;
+                } else {
+                    high = mid;
+                }
             }
         }
         return high as usize;
