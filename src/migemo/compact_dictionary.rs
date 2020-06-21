@@ -124,37 +124,13 @@ impl CompactDictionary {
         };
     }
 
-    pub fn predictive_search(&self, key: &Vec<u16>) -> Vec<Vec<u16>> {
-        let key_index = self.key_trie.get(key);
-        if key_index.is_some() && key_index.unwrap() > 1 {
-            let key_index = key_index.unwrap();
-            let indices = self.key_trie.iterator(key_index as u32);
-            let mut result = Vec::new();
-            for i in indices {
-                let value_start_pos = self.mapping_bit_vector.select(i as usize, false);
-                let value_end_pos = self.mapping_bit_vector.next_clear_bit(value_start_pos + 1);
-                let size = value_end_pos - value_start_pos - 1;
-                let offset = self.mapping_bit_vector.rank(value_start_pos, false);
-                for j in 0..size {
-                    result.push(self.value_trie.get_key(
-                        self.mapping[value_start_pos - (offset as usize) + (j as usize)] as usize,
-                    ));
-                }
-            }
-            return result;
-        }
-        return Vec::new();
-    }
-
-    pub fn predictive_search2(&self, key: &Vec<u16>, rxgen: &mut RegexGenerator) -> usize {
+    pub fn predictive_search(&self, key: &Vec<u16>, rxgen: &mut RegexGenerator) -> usize {
         let key_index = self.key_trie.get(key);
         let mut key: Vec<u16> = Vec::with_capacity(10);
         let mut count = 0;
         if key_index.is_some() && key_index.unwrap() > 1 {
             let key_index = key_index.unwrap();
-            let mut indices: Vec<u32> = Vec::with_capacity(100);
-            let _ = self.key_trie.iterator2(key_index as u32, &mut indices);
-            for i in indices {
+            for i in self.key_trie.predictive_search(key_index) {
                 let value_start_pos = self.mapping_bit_vector.select(i as usize, false);
                 let value_end_pos = self.mapping_bit_vector.next_clear_bit(value_start_pos + 1);
                 let size = value_end_pos - value_start_pos - 1;

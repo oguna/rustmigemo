@@ -1,4 +1,35 @@
 use super::bit_vector::BitVector;
+
+#[derive(Debug)]
+pub struct LoudsTriePredictiveSearchIter<'a> {
+    pub trie: &'a LoudsTrie,
+    pub upper: usize,
+    pub lower: usize,
+    pub cursor: usize,
+}
+
+impl<'a> Iterator for LoudsTriePredictiveSearchIter<'a> {
+    type Item = usize;
+    fn next(&mut self) -> Option<usize> {
+        if self.cursor < self.upper {
+            let last_cursor = self.cursor;
+            self.cursor = self.cursor + 1;
+            return Some(last_cursor);
+        } else if self.upper == self.lower {
+            return None;
+        } else {
+            self.lower = self.trie.bit_vector.rank(self.trie.bit_vector.select(self.lower, false)+1, true)+1;
+            self.upper = self.trie.bit_vector.rank(self.trie.bit_vector.select(self.upper, false)+1, true)+1;
+            self.cursor = self.lower;
+            if self.lower == self.upper {
+                return None
+            } else {
+                return Some(self.lower);
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct LoudsTrie {
     pub bit_vector: BitVector,
@@ -76,38 +107,15 @@ impl LoudsTrie {
         return Some(node_index);
     }
 
-    pub fn iterator(&self, index: u32) -> Vec<u32> {
-        let mut result: Vec<u32> = Vec::new();
-        result.push(index);
-        let child = self.first_child(index as usize);
-        if child.is_none() {
-            return result;
-        }
-        let mut child = child.unwrap();
-        let mut child_pos = self.bit_vector.select(child as usize, true);
-        while self.bit_vector.get(child_pos) {
-            result.extend(self.iterator(child as u32));
-            child = child + 1;
-            child_pos = child_pos + 1;
-        }
-        return result;
-    }
-
-    pub fn iterator2(&self, index: u32, result: &mut Vec<u32>) -> usize {
-        let mut count = 0;
-        result.push(index);
-        let child = self.first_child(index as usize);
-        if child.is_none() {
-            return 1;
-        }
-        let mut child = child.unwrap();
-        let mut child_pos = self.bit_vector.select(child as usize, true);
-        while self.bit_vector.get(child_pos) {
-            count = count + self.iterator2(child as u32, result);
-            child = child + 1;
-            child_pos = child_pos + 1;
-        }
-        return count;
+    pub fn predictive_search(&self, node: usize) -> LoudsTriePredictiveSearchIter {
+        let lower = node;
+        let upper = node + 1;
+        return LoudsTriePredictiveSearchIter {
+            trie: self,
+            upper: upper,
+            lower: lower,
+            cursor: lower,
+        };
     }
 
     pub fn size(&self) -> usize {

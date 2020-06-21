@@ -13,7 +13,7 @@ pub fn query_a_word(word: &str, dict: &CompactDictionary, operator: &RegexOperat
         generator.add(&elem);
     }
     */
-    dict.predictive_search2(&lower, &mut generator);
+    dict.predictive_search(&lower, &mut generator);
     let zen: Vec<u16> = han2zen(word.to_string()).encode_utf16().collect();
     generator.add(&zen);
     let han: Vec<u16> = zen2han(word.to_string()).encode_utf16().collect();
@@ -30,7 +30,7 @@ pub fn query_a_word(word: &str, dict: &CompactDictionary, operator: &RegexOperat
             generator.add(elem);
         }
         */
-        dict.predictive_search2(&hira, &mut generator);
+        dict.predictive_search(&hira, &mut generator);
         let kata = hira2kata(&String::from_utf16_lossy(&hira));
         let u16kata: Vec<u16> = kata.encode_utf16().collect();
         generator.add(&u16kata);
