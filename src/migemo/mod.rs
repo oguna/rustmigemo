@@ -5,3 +5,4 @@ pub mod louds_trie;
 pub mod regex_generator;
 pub mod romaji_processor;
 pub mod query;
+pub mod bit_list;

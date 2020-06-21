@@ -1,4 +1,5 @@
 use super::bit_vector::BitVector;
+use super::bit_list::BitList;
 use super::louds_trie::LoudsTrie;
 use super::regex_generator::RegexGenerator;
 use byteorder::{BigEndian, ReadBytesExt};
@@ -10,6 +11,7 @@ pub struct CompactDictionary {
     value_trie: LoudsTrie,
     mapping_bit_vector: BitVector,
     mapping: Vec<u32>,
+    has_mapping_bit_list: BitList,
 }
 
 pub struct SearchIter<'a> {
@@ -53,11 +55,13 @@ impl CompactDictionary {
         for i in 0..mapping_size {
             mapping[i as usize] = cursor.read_u32::<BigEndian>().unwrap();
         }
+        let has_mapping_bit_list = CompactDictionary::craete_mapping_bit_list(&mapping_bit_vector);
         return CompactDictionary {
             key_trie: key_trie,
             value_trie: value_trie,
             mapping_bit_vector: mapping_bit_vector,
             mapping: mapping,
+            has_mapping_bit_list: has_mapping_bit_list,
         };
     }
 
@@ -87,13 +91,25 @@ impl CompactDictionary {
         return louds_trie;
     }
 
+    fn craete_mapping_bit_list(bit_vector: &BitVector) -> BitList {
+        let num_of_nodes = bit_vector.rank(bit_vector.size()+1, false);
+        let mut bit_list = BitList::new_with_size(num_of_nodes);
+        let mut bit_position = 0;
+        for node in 1..num_of_nodes {
+            let has_mapping = bit_vector.get(bit_position + 1);
+            bit_list.set(node, has_mapping);
+            bit_position = bit_vector.next_clear_bit(bit_position + 1)
+        }
+        return bit_list;
+    }
+
     fn decode(c: u8) -> u16 {
         if 0x20 <= c && c <= 0x7e {
             return c as u16;
         }
         if 0xa1 <= c && c <= 0xf6 {
             return (c as u16) + 0x3040 - 0xa0;
-        }
+        }   
         return 0;
     }
 
@@ -131,6 +147,7 @@ impl CompactDictionary {
         if key_index.is_some() && key_index.unwrap() > 1 {
             let key_index = key_index.unwrap();
             for i in self.key_trie.predictive_search(key_index) {
+                if self.has_mapping_bit_list.get(i) {
                 let value_start_pos = self.mapping_bit_vector.select(i as usize, false);
                 let value_end_pos = self.mapping_bit_vector.next_clear_bit(value_start_pos + 1);
                 let size = value_end_pos - value_start_pos - 1;
@@ -139,6 +156,7 @@ impl CompactDictionary {
                     self.value_trie.get_key2(self.mapping[value_start_pos - (offset as usize) + (j as usize)] as usize, &mut key);
                     rxgen.add(&key);
                     count = count + 1;
+                }
                 }
             }
         }
