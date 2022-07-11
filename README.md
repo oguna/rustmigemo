@@ -9,6 +9,8 @@ C/Migemoや他のMigemo実装との性能比較は、[ベンチマーク](https:
 > cargo build --release
 ```
 
+Windowsの場合、`target/release/rustmigemo.exe` にビルドした実行可能ファイルが置かれています。
+
 ## 使い方
 
 rustmigemoの利用には、辞書ファイルが必要です。
