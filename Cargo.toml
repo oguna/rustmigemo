@@ -11,4 +11,4 @@ byteorder = "1.4.3"
 getopts = "0.2"
 
 [dev-dependencies]
-rand = "0.8.3"
+rand = "0.8.5"
