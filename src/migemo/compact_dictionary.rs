@@ -172,12 +172,12 @@ mod tests {
 
     #[test]
     fn test_1() {
-        let mut f = File::open("migemo-compact-dict").expect("Fail to load dict file");
+        let mut f = File::open("todofuken").expect("Fail to load dict file");
         let mut buf = Vec::new();
         let _ = f.read_to_end(&mut buf);
         drop(f);
         let dict = CompactDictionary::new(&buf);
-        let word: Vec<u16> = "けんさく".encode_utf16().collect();
+        let word: Vec<u16> = "おおさ".encode_utf16().collect();
         for s in dict.search(&word) {
             println!("{}", String::from_utf16_lossy(&s));
         }
