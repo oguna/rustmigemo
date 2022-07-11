@@ -1,5 +1,7 @@
 # rustmigemo
 
+[![CI](https://github.com/oguna/rustmigemo/actions/workflows/main.yml/badge.svg)](https://github.com/oguna/rustmigemo/actions/workflows/main.yml)
+
 ローマ字のまま日本語をインクリメンタル検索するためのツールであるMigemoを、Rustで実装したものです。
 
 C/Migemoや他のMigemo実装との性能比較は、[ベンチマーク](https://github.com/oguna/migemo-benchmark)でご確認ください。
