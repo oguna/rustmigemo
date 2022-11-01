@@ -6,3 +6,4 @@ pub mod regex_generator;
 pub mod romaji_processor;
 pub mod query;
 pub mod bit_list;
+pub mod ternary_regex_generator;
