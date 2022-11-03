@@ -92,16 +92,14 @@ fn insert(word: Vec<u16>, offset: usize, t: Option<Box<TernaryRegexNode>>) -> Op
     }
 }
 
-fn traverse_siblings(node: &Option<Box<TernaryRegexNode>>) -> Vec<&Box<TernaryRegexNode>> {
+fn traverse_siblings<'a>(node: &'a Option<Box<TernaryRegexNode>>, buffer: &mut Vec<&'a Box<TernaryRegexNode>>) {
     match node {
         None => {
-            vec![]
         },
         Some(ref n) => {
-            let mut children = traverse_siblings(&n.left);
-            children.push(n);
-            children.append(&mut traverse_siblings(&n.right));
-            children
+            traverse_siblings(&n.left, buffer);
+            buffer.push(n);
+            traverse_siblings(&n.right, buffer);
         }
     }
 }
@@ -118,7 +116,8 @@ fn is_characters_to_escape(c: u16) -> bool {
 fn generate(node: &Option<Box<TernaryRegexNode>>, buffer: &mut Vec<u16>, op: &RegexOperator) {
     let mut brother = 0;
     let mut haschild = 0;
-    let siblings = traverse_siblings(node);
+    let mut siblings = Vec::<&Box<TernaryRegexNode>>::new();
+    traverse_siblings(node, &mut siblings);
     for n in &siblings {
         brother += 1;
         if n.child.is_some() {
