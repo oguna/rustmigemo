@@ -31,6 +31,67 @@ pub struct RegexOperatorDetail {
 	pub newline: String,
 }
 
+impl RegexOperatorDetail {
+	pub fn get_regex_operator_detail(rxop: &RegexOperator) -> RegexOperatorDetail {
+		return match rxop {
+			RegexOperator::Default => RegexOperatorDetail {
+	   				or: "|".to_string(),
+	   				begin_group: "(".to_string(),
+	   				end_group: ")".to_string(),
+	   				begin_class: "[".to_string(),
+	   				end_class: "]".to_string(),
+	   				newline: String::new(),
+				},
+			RegexOperator::Vim => RegexOperatorDetail {
+	   				or: "\\|".to_string(),
+	   				begin_group: "\\%(".to_string(),
+	   				end_group: "\\)".to_string(),
+	   				begin_class: "[".to_string(),
+	   				end_class: "]".to_string(),
+	   				newline: "\\_s*".to_string(),
+				},
+			RegexOperator::VimNonNewline => RegexOperatorDetail {
+	   				or: "\\|".to_string(),
+	   				begin_group: "\\%(".to_string(),
+	   				end_group: "\\)".to_string(),
+	   				begin_class: "[".to_string(),
+	   				end_class: "]".to_string(),
+	   				newline: String::new(),
+				},
+			RegexOperator::Emacs => RegexOperatorDetail {
+	   				or: "\\|".to_string(),
+	   				begin_group: "\\(".to_string(),
+	   				end_group: "\\)".to_string(),
+	   				begin_class: "[".to_string(),
+	   				end_class: "]".to_string(),
+	   				newline: "\\_s-*".to_string(),
+				},
+			RegexOperator::EmacsNonNewline => RegexOperatorDetail {
+	   				or: "\\|".to_string(),
+	   				begin_group: "\\(".to_string(),
+	   				end_group: "\\)".to_string(),
+	   				begin_class: "[".to_string(),
+	   				end_class: "]".to_string(),
+	   				newline: String::new(),
+				},
+				RegexOperator::User {
+					or,
+					begin_group,
+					end_group,
+					begin_class,
+					end_class,
+					newline} => RegexOperatorDetail {
+						or: or.clone(),
+						begin_group: begin_group.clone(),
+						end_group: end_group.clone(),
+						begin_class: begin_class.clone(),
+						end_class: end_class.clone(),
+						newline: newline.clone(),
+				},
+		}
+	}
+}
+
 #[derive(Debug)]
 pub struct RegexGenerator {
 	pub root: Option<Box<RegexNode>>,
@@ -117,70 +178,11 @@ impl RegexGenerator {
 		}
 	}
 
-	fn get_regex_operator_detail(rxop: &RegexOperator) -> RegexOperatorDetail {
-		return match rxop {
-			RegexOperator::Default => RegexOperatorDetail {
-	   				or: "|".to_string(),
-	   				begin_group: "(".to_string(),
-	   				end_group: ")".to_string(),
-	   				begin_class: "[".to_string(),
-	   				end_class: "]".to_string(),
-	   				newline: String::new(),
-				},
-			RegexOperator::Vim => RegexOperatorDetail {
-	   				or: "\\|".to_string(),
-	   				begin_group: "\\%(".to_string(),
-	   				end_group: "\\)".to_string(),
-	   				begin_class: "[".to_string(),
-	   				end_class: "]".to_string(),
-	   				newline: "\\_s*".to_string(),
-				},
-			RegexOperator::VimNonNewline => RegexOperatorDetail {
-	   				or: "\\|".to_string(),
-	   				begin_group: "\\%(".to_string(),
-	   				end_group: "\\)".to_string(),
-	   				begin_class: "[".to_string(),
-	   				end_class: "]".to_string(),
-	   				newline: String::new(),
-				},
-			RegexOperator::Emacs => RegexOperatorDetail {
-	   				or: "\\|".to_string(),
-	   				begin_group: "\\(".to_string(),
-	   				end_group: "\\)".to_string(),
-	   				begin_class: "[".to_string(),
-	   				end_class: "]".to_string(),
-	   				newline: "\\_s-*".to_string(),
-				},
-			RegexOperator::EmacsNonNewline => RegexOperatorDetail {
-	   				or: "\\|".to_string(),
-	   				begin_group: "\\(".to_string(),
-	   				end_group: "\\)".to_string(),
-	   				begin_class: "[".to_string(),
-	   				end_class: "]".to_string(),
-	   				newline: String::new(),
-				},
-				RegexOperator::User {
-					or,
-					begin_group,
-					end_group,
-					begin_class,
-					end_class,
-					newline} => RegexOperatorDetail {
-						or: or.clone(),
-						begin_group: begin_group.clone(),
-						end_group: end_group.clone(),
-						begin_class: begin_class.clone(),
-						end_class: end_class.clone(),
-						newline: newline.clone(),
-				},
-		}
-	}
-
 	pub fn generate(&self, operator: &RegexOperator) -> String {
 		return match &self.root {
 			Some(_) => {
 				let mut string: String = String::new();
-				let operator_detail = RegexGenerator::get_regex_operator_detail(operator);
+				let operator_detail = RegexOperatorDetail::get_regex_operator_detail(operator);
 				self.generate_stub(&self.root, &operator_detail, &mut string);
 				string
 			},

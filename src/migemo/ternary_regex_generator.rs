@@ -1,4 +1,4 @@
-use super::regex_generator::{RegexOperator};
+use super::regex_generator::{RegexOperator, RegexOperatorDetail};
 
 #[derive(Debug)]
 pub struct TernaryRegexNode {
@@ -113,7 +113,7 @@ fn is_characters_to_escape(c: u16) -> bool {
     }
 }
 
-fn generate(node: &Option<Box<TernaryRegexNode>>, buffer: &mut Vec<u16>, op: &RegexOperator) {
+fn generate(node: &Option<Box<TernaryRegexNode>>, buffer: &mut String, op: &RegexOperatorDetail) {
     let mut brother = 0;
     let mut haschild = 0;
     let mut siblings = Vec::<&Box<TernaryRegexNode>>::new();
@@ -126,38 +126,38 @@ fn generate(node: &Option<Box<TernaryRegexNode>>, buffer: &mut Vec<u16>, op: &Re
     }
     let nochild = brother - haschild;
     if brother > 1 && haschild > 0 {
-        buffer.push(b'(' as u16);
+        buffer.push_str(&op.begin_group);
     }
     if nochild > 0 {
         if nochild > 1 {
-            buffer.push(b'[' as u16);
+            buffer.push_str(&op.begin_class);
         }
         for n in &siblings {
             if n.child.is_some() {
                 continue;
             }
             if is_characters_to_escape(n.code) {
-                buffer.push(b'\\' as u16);
+                buffer.push('\\');
             }
-            buffer.push(n.code);
+            buffer.push(char::from_u32(n.code as u32).unwrap());
         }
         if nochild > 1 {
-            buffer.push(b']' as u16);
+            buffer.push_str(&op.end_class);
         }
     }
     if haschild > 0 {
         if nochild > 0 {
-            buffer.push(b'|' as u16);
+            buffer.push_str(&op.or);
         }
         for n in &siblings {
             if n.child.is_some() {
                 if is_characters_to_escape(n.code) {
-                    buffer.push(b'\\' as u16);
+                    buffer.push(char::from(92));
                 }
-                buffer.push(n.code);
+                buffer.push(char::from_u32(n.code as u32).unwrap());
                 generate(&n.child, buffer, op);
                 if haschild > 1 {
-                    buffer.push(b'|' as u16);
+                    buffer.push_str(&op.or);
                 }
             }
         }
@@ -166,7 +166,7 @@ fn generate(node: &Option<Box<TernaryRegexNode>>, buffer: &mut Vec<u16>, op: &Re
         }
     }
     if brother > 1 && haschild > 0 {
-        buffer.push(b')' as u16);
+        buffer.push_str(&op.end_group);
     }
 }
 
@@ -188,9 +188,10 @@ impl TernaryRegexGenerator {
         if self.root.is_none() {
             return String::new();
         } else {
-            let mut buffer = Vec::<u16>::new();
-            generate(& self.root, &mut buffer, op);
-            return String::from_utf16_lossy(&buffer);
+            let op_detail = RegexOperatorDetail::get_regex_operator_detail(op);
+            let mut buffer = String::new();
+            generate(& self.root, &mut buffer, &op_detail);
+            return buffer;
         }
     }
 }
