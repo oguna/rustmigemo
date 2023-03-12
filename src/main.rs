@@ -95,7 +95,7 @@ fn main() {
             if line.trim().is_empty() {
                 break;
             }
-            let result = query(line, &dict, &rxop);
+            let result = query(line.trim().to_string(), &dict, &rxop);
             if !quiet {
                 println!("PATTERN: {}", result);
             } else {
