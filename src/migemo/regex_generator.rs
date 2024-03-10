@@ -226,8 +226,21 @@ impl RegexGenerator {
 				if escape_characters.binary_search(&tmp_unwrap.code).is_ok() {
 					buf.push('\\');
 				}
-				buf.push(::std::char::from_u32(tmp_unwrap.code as u32).unwrap());
-				tmp = &tmp_unwrap.next;
+
+				let code_point = tmp_unwrap.code as u32;
+				if let Some(ch) = std::char::from_u32(code_point) {
+					buf.push(ch);
+				} else if code_point >= 0xD800 && code_point <= 0xDBFF {
+					let high_surrogate = code_point;
+					tmp = &tmp.as_ref().unwrap().next;
+					let low_surrogate = tmp.as_ref().unwrap().next.as_ref().unwrap().code as u32;
+					buf.push(decode_surrogate_pair(high_surrogate, low_surrogate).unwrap());
+				} else {
+					// Do nothing for invalid code points
+					panic!("Invalid code point: U+{:X}", code_point);
+				}
+
+				tmp = &tmp.as_ref().unwrap().next;
 			}
 			if nochild > 1 {
 				buf.push_str(&operator.end_class);
@@ -249,7 +262,20 @@ impl RegexGenerator {
 				{
 					buf.push('\\');
 				}
-				buf.push(::std::char::from_u32(tmp.as_ref().unwrap().code as u32).unwrap());
+
+				let code_point = tmp.as_ref().unwrap().code as u32;
+				if let Some(ch) = std::char::from_u32(code_point) {
+					buf.push(ch);
+				} else if code_point >= 0xD800 && code_point <= 0xDBFF {
+					let high_surrogate = code_point;
+					tmp = &tmp.as_ref().unwrap().next;
+					let low_surrogate = tmp.as_ref().unwrap().next.as_ref().unwrap().code as u32;
+					buf.push(decode_surrogate_pair(high_surrogate, low_surrogate).unwrap());
+				} else {
+					// Do nothing for invalid code points
+					panic!("Invalid code point: U+{:X}", code_point);
+				}
+
 				if operator.newline.len() > 0 {
 					buf.push_str(&operator.newline);
 				}
@@ -270,6 +296,12 @@ impl RegexGenerator {
 			buf.push_str(&operator.end_group);
 		}
 	}
+}
+
+fn decode_surrogate_pair(high_surrogate: u32, low_surrogate: u32) -> Option<char> {
+	let high_ten_bits = (high_surrogate & 0x3FF) << 10;
+	let low_ten_bits = low_surrogate & 0x3FF;
+	return std::char::from_u32(0x10000 + high_ten_bits + low_ten_bits);
 }
 
 #[cfg(test)]
