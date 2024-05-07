@@ -1,6 +1,8 @@
+use std::char::{decode_utf16, REPLACEMENT_CHARACTER};
+
 #[derive(Debug)]
 pub struct RegexNode {
-	pub code: u16,
+	pub code: char,
 	pub child: Option<Box<RegexNode>>,
 	pub next: Option<Box<RegexNode>>,
 }
@@ -102,12 +104,15 @@ impl RegexGenerator {
 		if word.len() == 0 {
 			return;
 		}
-		self.root = RegexGenerator::_add(::std::mem::replace(&mut self.root, None), word, 0);
+		let utf32word: Vec<char> = decode_utf16(word.iter().cloned())
+                   .map(|r| r.unwrap_or(REPLACEMENT_CHARACTER))
+                   .collect();
+		self.root = RegexGenerator::_add(::std::mem::replace(&mut self.root, None), &utf32word, 0);
 	}
 
 	fn _add(
 		node: Option<Box<RegexNode>>,
-		word: &Vec<u16>,
+		word: &Vec<char>,
 		offset: usize,
 	) -> Option<Box<RegexNode>> {
 		if node.is_none() {
@@ -136,7 +141,7 @@ impl RegexGenerator {
 		} else {
 			fn find_le_node(
 				node: &mut Box<RegexNode>,
-				code: u16,
+				code: char,
 			) -> &mut Box<RegexNode> {
 				if node.next.is_some() && node.next.as_ref().unwrap().code <= code {
 					if let Some(ref mut _n) = node.next {
@@ -149,7 +154,7 @@ impl RegexGenerator {
 				}
 			}
 			let mut _node = node.unwrap();
-			let mut another_node = find_le_node(&mut _node, code);
+			let another_node = find_le_node(&mut _node, code);
 			if another_node.as_ref().code == code {
 				if another_node.as_ref().child.is_none() {
 					return Some(_node);
@@ -191,8 +196,8 @@ impl RegexGenerator {
 	}
 
 	fn generate_stub(&self, node: &Option<Box<RegexNode>>, operator: &RegexOperatorDetail, buf: &mut String) {
-		let mut escape_characters: Vec<u16> =
-			"\\.[]{}()*+-?^$|".chars().map(|c| c as u16).collect();
+		let mut escape_characters: Vec<char> =
+			"\\.[]{}()*+-?^$|".chars().collect();
 		escape_characters.sort();
 		let mut brother = 1;
 		let mut haschild = 0;
@@ -249,7 +254,7 @@ impl RegexGenerator {
 				{
 					buf.push('\\');
 				}
-				buf.push(::std::char::from_u32(tmp.as_ref().unwrap().code as u32).unwrap());
+				buf.push(tmp.as_ref().unwrap().code);
 				if operator.newline.len() > 0 {
 					buf.push_str(&operator.newline);
 				}
@@ -333,6 +338,21 @@ mod tests {
 		rxgen.add(&a_b);
 		let actual = rxgen.generate(&rxop);
 		let expected = "a\\.b";
+		assert_eq!(actual, expected);
+	}
+
+	#[test]
+	fn surrogate_pair() {
+		let mut rxgen = RegexGenerator {
+			root: None,
+		};
+		let rxop = RegexOperator::Default;
+		let a: Vec<u16> = "𠮟".encode_utf16().collect();
+		let b: Vec<u16> = "𠮷".encode_utf16().collect();
+		rxgen.add(&a);
+		rxgen.add(&b);
+		let actual = rxgen.generate(&rxop);
+		let expected = "[𠮟𠮷]";
 		assert_eq!(actual, expected);
 	}
 }
