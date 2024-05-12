@@ -128,14 +128,12 @@ pub fn build(mut dict: HashMap<String, Vec<String>>) -> Vec<u8> {
 }
 
 mod tests {
-    use std::{collections::HashMap};
-
-    use crate::migemo::compact_dictionary::CompactDictionary;
-
-    use super::build;
 
 	#[test]
 	fn test_1() {
+        use std::collections::HashMap;
+        use crate::migemo::compact_dictionary::CompactDictionary;
+        use super::build;
         let mut dict = HashMap::new();
         dict.insert("けんさ".to_string(), vec!["検査".to_string()]);
         dict.insert("けんさく".to_string(), vec!["検索".to_string(),"研削".to_string()]);

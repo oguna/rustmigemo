@@ -45,7 +45,7 @@ pub fn query(word: String, dict: &CompactDictionary, operator: &RegexOperator) -
     if word.len() == 0 {
         return "".to_string();
     }
-    let words = parse_query(&word);
+    let words = tokenize(word);
     let mut result = String::new();
     for w in words {
         result.extend(query_a_word(&w, dict, operator).chars());
@@ -53,6 +53,47 @@ pub fn query(word: String, dict: &CompactDictionary, operator: &RegexOperator) -
     return result;
 }
 
+fn tokenize(input: String) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current_token = String::new();
+    let mut uppercase_string = false;
+    for c in input.chars() {
+        if c.is_ascii_uppercase() {
+            if uppercase_string {
+            } else if current_token.len() == 1 && current_token.chars().next().unwrap().is_ascii_uppercase() {
+                uppercase_string = true;
+            } else if !current_token.is_empty() {
+                tokens.push(current_token.clone());
+                current_token.clear();
+            }
+            current_token.push(c);
+        } else if c.is_whitespace() {
+            if !current_token.is_empty() {
+                tokens.push(current_token.clone());
+                current_token.clear();
+            }
+            uppercase_string = false;
+        } else {
+            if uppercase_string {
+                if !current_token.is_empty() {
+                    tokens.push(current_token.clone());
+                    current_token.clear();
+                }
+                uppercase_string = false;
+            }
+            current_token.push(c);
+        }
+    }
+
+    if !current_token.is_empty() {
+        tokens.push(current_token);
+    }
+    tokens
+}
+
+/*
+// イテレータを使ってクエリをトークン化するプログラム
+// うまく動かなかったのでコメントアウト
 pub struct QueryIter<'a> {
     string: &'a str,
     cursor: usize,
@@ -150,6 +191,7 @@ fn parse_query<'a>(query: &'a str) -> QueryIter<'a> {
     return vec;
     */
 }
+*/
 
 #[cfg(test)]
 mod tests {
@@ -158,35 +200,52 @@ mod tests {
     #[test]
     fn test_parse_query() {
         let query = "toukyouOosaka nagoyaFUKUOKAhokkaido ";
-        let mut iter = parse_query(query);
-        assert_eq!(iter.next(), Some("toukyou"));
-        assert_eq!(iter.next(), Some("Oosaka"));
-        assert_eq!(iter.next(), Some("nagoya"));
-        assert_eq!(iter.next(), Some("FUKUOKA"));
-        assert_eq!(iter.next(), Some("hokkaido"));
-        assert_eq!(iter.next(), None);
+        let tokens = tokenize(query.to_string());
+        assert_eq!(tokens.len(), 5);
+        assert_eq!(tokens[0], "toukyou".to_string());
+        assert_eq!(tokens[1], "Oosaka".to_string());
+        assert_eq!(tokens[2], "nagoya".to_string());
+        assert_eq!(tokens[3], "FUKUOKA".to_string());
+        assert_eq!(tokens[4], "hokkaido".to_string());
     }
     #[test]
     fn test_parse_query_1() {
         let query = "a";
-        let mut iter = parse_query(query);
-        assert_eq!(iter.next(), Some("a"));
-        assert_eq!(iter.next(), None);
+        let tokens = tokenize(query.to_string());
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens[0], "a");
     }
 
     #[test]
     fn test_parse_query_2() {
         let query = "A";
-        let mut iter = parse_query(query);
-        assert_eq!(iter.next(), Some("A"));
-        assert_eq!(iter.next(), None);
+        let tokens = tokenize(query.to_string());
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens[0], "A".to_string());
     }
 
     #[test]
     fn test_parse_query_3() {
         let query = "あ";
-        let mut iter = parse_query(query);
-        assert_eq!(iter.next(), Some("あ"));
-        assert_eq!(iter.next(), None);
+        let tokens = tokenize(query.to_string());
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens[0], "あ".to_string());
+    }
+
+    #[test]
+    fn test_parse_query_4() {
+        let query = "/";
+        let tokens = tokenize(query.to_string());
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens[0], "/");
+    }
+
+    #[test]
+    fn test_parse_query_5() {
+        let query = "aaA";
+        let tokens = tokenize(query.to_string());
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(tokens[0], "aa");
+        assert_eq!(tokens[1], "A");
     }
 }
