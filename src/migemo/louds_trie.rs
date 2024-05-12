@@ -126,7 +126,7 @@ impl LoudsTrie {
         let mut memo: Vec<i32> = vec![1; keys.len()];
         let mut offset = 0;
         let mut current_node: usize = 1;
-        let mut edges = vec![0x30, 0x30];
+        let mut edges = vec![0x20, 0x20];
         let mut child_sizes: Vec<u32> = vec![0; 128];
         loop {
             let mut last_char = 0;
