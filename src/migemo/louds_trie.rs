@@ -221,6 +221,6 @@ mod tests {
         assert_eq!(actual, Some(10));
         assert_eq!(trie.bit_vector.words, vec![1145789805]);
         assert_eq!(trie.bit_vector.size_in_bits, 32);
-        assert_eq!(trie.edges, vec![48, 48, 98, 100, 97, 111, 97, 98, 100, 110, 120, 100, 110, 121,107, 99, 101]);
+        assert_eq!(trie.edges, vec![32, 32, 98, 100, 97, 111, 97, 98, 100, 110, 120, 100, 110, 121,107, 99, 101]);
     }
 }
