@@ -113,7 +113,7 @@ impl CompactDictionary {
         return 0;
     }
 
-    pub fn search(&self, key: &Vec<u16>) -> SearchIter {
+    pub fn search(&self, key: &Vec<u16>) -> SearchIter<'_> {
         let key_index = self.key_trie.get(key);
         if key_index.is_some() {
             let key_index = key_index.unwrap();

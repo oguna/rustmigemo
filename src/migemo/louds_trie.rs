@@ -107,7 +107,7 @@ impl LoudsTrie {
         return Some(node_index);
     }
 
-    pub fn predictive_search(&self, node: usize) -> LoudsTriePredictiveSearchIter {
+    pub fn predictive_search(&self, node: usize) -> LoudsTriePredictiveSearchIter<'_> {
         let lower = node;
         let upper = node + 1;
         return LoudsTriePredictiveSearchIter {
