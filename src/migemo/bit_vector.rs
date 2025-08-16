@@ -216,10 +216,10 @@ mod tests {
             return count;
         }
         const SIZE: usize = 10000;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut bits: Vec<bool> = vec![false; SIZE];
         for i in 0..bits.len() {
-            bits[i] = rng.gen();
+            bits[i] = rng.random();
         }
         let words = bits_to_words(&bits);
         let bitvector = BitVector::new(words, SIZE);
@@ -244,10 +244,10 @@ mod tests {
             return Err("");
         }
         const SIZE: usize = 10000;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut bits: Vec<bool> = vec![false; SIZE];
         for i in 0..bits.len() {
-            bits[i] = rng.gen();
+            bits[i] = rng.random();
         }
         let words = bits_to_words(&bits);
         let mut count1 = 0;
@@ -280,10 +280,10 @@ mod tests {
             }
         }
         const SIZE: usize = 1000;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut bits: Vec<bool> = vec![false; SIZE];
         for i in 0..bits.len() {
-            bits[i] = rng.gen();
+            bits[i] = rng.random();
         }
         let words = bits_to_words(&bits);
         let bitvector = BitVector::new(words, SIZE);
