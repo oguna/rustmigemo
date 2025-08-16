@@ -2,7 +2,7 @@ use super::regex_generator::{RegexOperator, RegexOperatorDetail};
 
 #[derive(Debug)]
 pub struct TernaryRegexNode {
-	pub code: u16,
+	pub code: char,
 	pub child: Option<Box<TernaryRegexNode>>,
 	pub left: Option<Box<TernaryRegexNode>>,
 	pub right: Option<Box<TernaryRegexNode>>,
@@ -12,7 +12,7 @@ pub struct TernaryRegexNode {
 #[derive(Debug)]
 pub struct TernaryRegexGenerator {
     pub root: Option<Box<TernaryRegexNode>>,
-    //pub unused: Option<Box<TernaryRegexNode>>,
+    // TODO: pub unused: Option<Box<TernaryRegexNode>>,
 }
 
 fn skew(t: Option<Box<TernaryRegexNode>>) -> Option<Box<TernaryRegexNode>> {
@@ -21,45 +21,41 @@ fn skew(t: Option<Box<TernaryRegexNode>>) -> Option<Box<TernaryRegexNode>> {
             return None;
         },
         Some(mut t1) => {
-            let level = t1.level;
-            if t1.left.is_none() {
-                return Some(t1);
+            if let Some(left) = &t1.left {
+                if left.level == t1.level {
+                    let mut l = t1.left.take().unwrap();
+                    t1.left = l.right.take();
+                    l.right = Some(t1);
+                    return Some(l);
+                }
             }
-            if t1.level == level {
-                let mut l = t1.left.take().unwrap();
-                let b = l.right.take();
-                t1.left = b;
-                l.right = Some(t1);
-                return Some(l);
-            } else {
-                return Some(t1);
-            }
+            Some(t1)
         }
     }
 }
 
 fn split(t: Option<Box<TernaryRegexNode>>) -> Option<Box<TernaryRegexNode>> {
-    match t {
-        None => {
-            return None;
-        },
-        Some(mut tt) => {
-            if tt.as_ref().right.is_none() || tt.right.as_ref().unwrap().right.is_none() {
-                return Some(tt);
-            } else if tt.level == tt.right.as_ref().unwrap().right.as_ref().unwrap().level {
-                let mut r = tt.right.take().unwrap();
-                tt.right = std::mem::replace(&mut r.left, None);
-                r.left = Some(tt);
-                r.level = r.level + 1;
+    let mut t = match t {
+        Some(node) => node,
+        None => return None,
+    };
+
+    if let Some(right) = t.right.as_ref() {
+        if let Some(right_right) = right.right.as_ref() {
+            if t.level == right_right.level {
+                let mut r = t.right.take().unwrap();
+                t.right = r.left.take();
+                r.left = Some(t);
+                r.level += 1;
                 return Some(r);
-            } else {
-                return Some(tt);
             }
         }
     }
+
+    Some(t)
 }
 
-fn insert(word: Vec<u16>, offset: usize, t: Option<Box<TernaryRegexNode>>) -> Option<Box<TernaryRegexNode>> {
+fn insert(word: &[char], offset: usize, t: Option<Box<TernaryRegexNode>>) -> Option<Box<TernaryRegexNode>> {
     if offset >= word.len() {
         return t;
     }
@@ -104,10 +100,27 @@ fn traverse_siblings<'a>(node: &'a Option<Box<TernaryRegexNode>>, buffer: &mut V
     }
 }
 
-fn is_characters_to_escape(c: u16) -> bool {
-    let u = [9223494151364935680u64, 4035225268137230336u64];
-    if c < 128 {
-        return (u[(c as usize)/64]>>((c as u64)%64))&1 == 1;
+const ESCAPE_BITMAP: [u64; 2] = generate_escape_bitmap();
+
+const fn generate_escape_bitmap() -> [u64; 2] {
+    const ESCAPE_CHARS: &str = r"()[]{}?*+|^$.\";
+    let mut bitmap = [0u64; 2];
+    let bytes = ESCAPE_CHARS.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let byte = bytes[i];
+        let c = byte as u64;
+        if c < 128 {
+            bitmap[(c / 64) as usize] |= 1 << (c % 64);
+        }
+        i += 1;
+    }
+    bitmap
+}
+
+fn is_characters_to_escape(c: char) -> bool {
+    if c < '\u{80}' {
+        return (ESCAPE_BITMAP[(c as usize)/64]>>((c as u64)%64))&1 == 1;
     } else {
         return false;
     }
@@ -139,7 +152,7 @@ fn generate(node: &Option<Box<TernaryRegexNode>>, buffer: &mut String, op: &Rege
             if is_characters_to_escape(n.code) {
                 buffer.push('\\');
             }
-            buffer.push(char::from_u32(n.code as u32).unwrap());
+            buffer.push(n.code);
         }
         if nochild > 1 {
             buffer.push_str(&op.end_class);
@@ -149,20 +162,19 @@ fn generate(node: &Option<Box<TernaryRegexNode>>, buffer: &mut String, op: &Rege
         if nochild > 0 {
             buffer.push_str(&op.or);
         }
+        let mut is_first = true;
         for n in &siblings {
             if n.child.is_some() {
-                if is_characters_to_escape(n.code) {
-                    buffer.push(char::from(92));
-                }
-                buffer.push(char::from_u32(n.code as u32).unwrap());
-                generate(&n.child, buffer, op);
-                if haschild > 1 {
+                if !is_first {
                     buffer.push_str(&op.or);
                 }
+                if is_characters_to_escape(n.code) {
+                    buffer.push('\\');
+                }
+                buffer.push(n.code);
+                generate(&n.child, buffer, op);
+                is_first = false;
             }
-        }
-        if haschild > 1 {
-            buffer.pop();
         }
     }
     if brother > 1 && haschild > 0 {
@@ -177,11 +189,11 @@ impl TernaryRegexGenerator {
         }
     }
 
-    pub fn add(&mut self, word: &Vec<u16>) {
+    pub fn add(&mut self, word: &[char]) {
         if word.len() == 0 {
             return;
         }
-        self.root = insert(word.to_vec(), 0, ::std::mem::replace(&mut self.root, None));
+        self.root = insert(word, 0, self.root.take());
     }
 
     pub fn generate(&self, op: &RegexOperator) -> String {
@@ -198,57 +210,53 @@ impl TernaryRegexGenerator {
 
 #[cfg(test)]
 mod tests {
-	use super::*;
+    use super::*;
 
-	#[test]
-	fn bad_dad() {
-		let mut rxgen = TernaryRegexGenerator::new();
-		let rxop = RegexOperator::Default;
-		let bad: Vec<u16> = "bad".encode_utf16().collect();
-		let dad: Vec<u16> = "dad".encode_utf16().collect();
-		rxgen.add(&bad);
-		rxgen.add(&dad);
-		let actual = rxgen.generate(&rxop);
-		let expected = "(bad|dad)";
-		assert_eq!(actual, expected);
-	}
-
-	#[test]
-	fn dad_bat() {
-		let mut rxgen = TernaryRegexGenerator::new();
+    fn run_test(words: &[&str], expected: &str) {
+        let mut rxgen = TernaryRegexGenerator::new();
         let rxop = RegexOperator::Default;
-		let bad: Vec<u16> = "bad".encode_utf16().collect();
-		let bat: Vec<u16> = "bat".encode_utf16().collect();
-		rxgen.add(&bad);
-		rxgen.add(&bat);
-		let actual = rxgen.generate(&rxop);
-		let expected = "ba[dt]";
-		assert_eq!(actual, expected);
-	}
 
-	#[test]
-	fn a_b_a() {
-		let mut rxgen = TernaryRegexGenerator::new();
-		let rxop = RegexOperator::Default;
-		let a1: Vec<u16> = "a".encode_utf16().collect();
-		let b: Vec<u16> = "b".encode_utf16().collect();
-		let a2: Vec<u16> = "a".encode_utf16().collect();
-		rxgen.add(&a1);
-		rxgen.add(&b);
-		rxgen.add(&a2);
-		let actual = rxgen.generate(&rxop);
-		let expected = "[ab]";
-		assert_eq!(actual, expected);
-	}
+        for word in words {
+            let word_chars: Vec<char> = word.chars().collect();
+            rxgen.add(&word_chars);
+        }
 
-	#[test]
-	fn escape() {
-		let mut rxgen = TernaryRegexGenerator::new();
-		let rxop = RegexOperator::Default;
-		let a_b: Vec<u16> = "a.b".encode_utf16().collect();
-		rxgen.add(&a_b);
-		let actual = rxgen.generate(&rxop);
-		let expected = "a\\.b";
-		assert_eq!(actual, expected);
-	}
+        let actual = rxgen.generate(&rxop);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn bad_dad() {
+        run_test(&["bad", "dad"], "(bad|dad)");
+    }
+
+    #[test]
+    fn bad_bat() {
+        run_test(&["bad", "bat"], "ba[dt]");
+    }
+
+    #[test]
+    fn a_b_a() {
+        run_test(&["a", "b", "a"], "[ab]");
+    }
+
+    #[test]
+    fn escape() {
+        run_test(&["a.b"], "a\\.b");
+    }
+
+    #[test]
+    fn empty() {
+        run_test(&[], "");
+    }
+
+    #[test]
+    fn a_ab_abc() {
+        run_test(&["a", "ab", "abc"], "a");
+    }
+
+    #[test]
+    fn car_cat_can_bar_bat() {
+        run_test(&["car", "cat", "can", "bar", "bat"], "(ba[rt]|ca[nrt])");
+    }
 }
