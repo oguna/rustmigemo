@@ -1,40 +1,72 @@
 use super::character_converter::*;
 use super::compact_dictionary::*;
 use super::regex_generator::*;
+use super::ternary_regex_generator::*;
 use super::romaji_processor::*;
 use std::iter::Peekable;
 use std::str::CharIndices;
+use std::char::{decode_utf16, REPLACEMENT_CHARACTER};
 
 pub fn query_a_word(word: &str, dict: &CompactDictionary, operator: &RegexOperator) -> String {
-    let utf16word: Vec<u16> = word.encode_utf16().collect();
-    let mut generator = RegexGenerator { root: None };
-    generator.add(&utf16word);
+    query_a_word_with_generator(word, dict, operator, &mut RegexGenerator { root: None })
+}
+
+pub fn query_a_word_with_generator<T: RegexGeneratorTrait>(
+    word: &str, 
+    dict: &CompactDictionary, 
+    operator: &RegexOperator,
+    generator: &mut T
+) -> String {
+    let word_chars: Vec<char> = word.chars().collect();
+    generator.add(&word_chars);
+    
     let lower: Vec<u16> = word.to_lowercase().encode_utf16().collect();
     for elem in dict.predictive_search(&lower) {
-        generator.add(&elem);
+        let elem_chars: Vec<char> = decode_utf16(elem.iter().cloned())
+            .map(|r| r.unwrap_or(REPLACEMENT_CHARACTER))
+            .collect();
+        generator.add(&elem_chars);
     }
-    let zen: Vec<u16> = han2zen(word.to_string()).encode_utf16().collect();
-    generator.add(&zen);
-    let han: Vec<u16> = zen2han(word.to_string()).encode_utf16().collect();
-    generator.add(&han);
+    
+    let zen_str = han2zen(word.to_string());
+    let zen_chars: Vec<char> = zen_str.chars().collect();
+    generator.add(&zen_chars);
+    
+    let han_str = zen2han(word.to_string());
+    let han_chars: Vec<char> = han_str.chars().collect();
+    generator.add(&han_chars);
 
     let processor = RomanProcessor::new();
     let hiragana = processor.romaji_to_hiragana_predictively(&lower);
     for suffix in hiragana.suffixes {
         let mut hira = hiragana.prefix.clone();
         hira.extend(suffix);
-        generator.add(&hira);
+        let hira_chars: Vec<char> = decode_utf16(hira.iter().cloned())
+            .map(|r| r.unwrap_or(REPLACEMENT_CHARACTER))
+            .collect();
+        generator.add(&hira_chars);
+        
         for elem in dict.predictive_search(&hira) {
-            generator.add(&elem);
+            let elem_chars: Vec<char> = decode_utf16(elem.iter().cloned())
+                .map(|r| r.unwrap_or(REPLACEMENT_CHARACTER))
+                .collect();
+            generator.add(&elem_chars);
         }
+        
         let kata = hira2kata(&String::from_utf16_lossy(&hira));
-        let u16kata: Vec<u16> = kata.encode_utf16().collect();
-        generator.add(&u16kata);
-        let u16zen: Vec<u16> = zen2han(kata).encode_utf16().collect();
-        generator.add(&u16zen);
+        let kata_chars: Vec<char> = kata.chars().collect();
+        generator.add(&kata_chars);
+        
+        let zen_kata = zen2han(kata);
+        let zen_kata_chars: Vec<char> = zen_kata.chars().collect();
+        generator.add(&zen_kata_chars);
     }
     let generated = generator.generate(&operator);
     return generated;
+}
+
+pub fn query_a_word_with_ternary(word: &str, dict: &CompactDictionary, operator: &RegexOperator) -> String {
+    query_a_word_with_generator(word, dict, operator, &mut TernaryRegexGenerator::new())
 }
 
 pub fn query(word: String, dict: &CompactDictionary, operator: &RegexOperator) -> String {
@@ -189,5 +221,23 @@ mod tests {
         let query = "東京Tower";
         let tokens: Vec<&str> = tokenize(query).collect();
         assert_eq!(tokens, vec!["東京", "Tower"]);
+    }
+
+    #[test]
+    fn test_generator_compatibility() {
+        // 両方のジェネレータが単純な文字列で同じ結果を生成することを確認
+        let mut gen1 = RegexGenerator { root: None };
+        let mut gen2 = TernaryRegexGenerator::new();
+        let op = RegexOperator::Default;
+        
+        let test_chars: Vec<char> = "test".chars().collect();
+        gen1.add(&test_chars);
+        gen2.add(&test_chars);
+        
+        let result1 = gen1.generate(&op);
+        let result2 = gen2.generate(&op);
+        
+        assert_eq!(result1, result2);
+        assert_eq!(result1, "test");
     }
 }

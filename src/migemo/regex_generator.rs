@@ -94,13 +94,19 @@ impl RegexOperatorDetail {
 	}
 }
 
+/// 正規表現ジェネレータの共通トレイト
+pub trait RegexGeneratorTrait {
+    fn add(&mut self, word: &[char]);
+    fn generate(&self, operator: &RegexOperator) -> String;
+}
+
 #[derive(Debug)]
 pub struct RegexGenerator {
 	pub root: Option<Box<RegexNode>>,
 }
 
 impl RegexGenerator {
-	pub fn add(&mut self, word: &[u16]) {
+	pub fn add_utf16(&mut self, word: &[u16]) {
 		if word.len() == 0 {
 			return;
 		}
@@ -112,7 +118,7 @@ impl RegexGenerator {
 
 	fn _add(
 		node: Option<Box<RegexNode>>,
-		word: &Vec<char>,
+		word: &[char],
 		offset: usize,
 	) -> Option<Box<RegexNode>> {
 		if node.is_none() {
@@ -277,6 +283,27 @@ impl RegexGenerator {
 	}
 }
 
+impl RegexGeneratorTrait for RegexGenerator {
+	fn add(&mut self, word: &[char]) {
+		if word.len() == 0 {
+			return;
+		}
+		self.root = RegexGenerator::_add(::std::mem::replace(&mut self.root, None), word, 0);
+	}
+
+	fn generate(&self, operator: &RegexOperator) -> String {
+		return match &self.root {
+			Some(_) => {
+				let mut string: String = String::new();
+				let operator_detail = RegexOperatorDetail::get_regex_operator_detail(operator);
+				self.generate_stub(&self.root, &operator_detail, &mut string);
+				string
+			},
+			None => "".to_string(),
+		};
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -287,8 +314,8 @@ mod tests {
 			root: None,
 		};
 		let rxop = RegexOperator::Default;
-		let bad: Vec<u16> = "bad".encode_utf16().collect();
-		let dad: Vec<u16> = "dad".encode_utf16().collect();
+		let bad: Vec<char> = "bad".chars().collect();
+		let dad: Vec<char> = "dad".chars().collect();
 		rxgen.add(&bad);
 		rxgen.add(&dad);
 		let actual = rxgen.generate(&rxop);
@@ -302,8 +329,8 @@ mod tests {
 			root: None,
 		};
 		let rxop = RegexOperator::Default;
-		let bad: Vec<u16> = "bad".encode_utf16().collect();
-		let bat: Vec<u16> = "bat".encode_utf16().collect();
+		let bad: Vec<char> = "bad".chars().collect();
+		let bat: Vec<char> = "bat".chars().collect();
 		rxgen.add(&bad);
 		rxgen.add(&bat);
 		let actual = rxgen.generate(&rxop);
@@ -317,9 +344,9 @@ mod tests {
 			root: None,
 		};
 		let rxop = RegexOperator::Default;
-		let a1: Vec<u16> = "a".encode_utf16().collect();
-		let b: Vec<u16> = "b".encode_utf16().collect();
-		let a2: Vec<u16> = "a".encode_utf16().collect();
+		let a1: Vec<char> = "a".chars().collect();
+		let b: Vec<char> = "b".chars().collect();
+		let a2: Vec<char> = "a".chars().collect();
 		rxgen.add(&a1);
 		rxgen.add(&b);
 		rxgen.add(&a2);
@@ -334,7 +361,7 @@ mod tests {
 			root: None,
 		};
 		let rxop = RegexOperator::Default;
-		let a_b: Vec<u16> = "a.b".encode_utf16().collect();
+		let a_b: Vec<char> = "a.b".chars().collect();
 		rxgen.add(&a_b);
 		let actual = rxgen.generate(&rxop);
 		let expected = "a\\.b";
@@ -347,8 +374,8 @@ mod tests {
 			root: None,
 		};
 		let rxop = RegexOperator::Default;
-		let a: Vec<u16> = "𠮟".encode_utf16().collect();
-		let b: Vec<u16> = "𠮷".encode_utf16().collect();
+		let a: Vec<char> = "𠮟".chars().collect();
+		let b: Vec<char> = "𠮷".chars().collect();
 		rxgen.add(&a);
 		rxgen.add(&b);
 		let actual = rxgen.generate(&rxop);

@@ -1,4 +1,4 @@
-use super::regex_generator::{RegexOperator, RegexOperatorDetail};
+use super::regex_generator::{RegexOperator, RegexOperatorDetail, RegexGeneratorTrait};
 
 #[derive(Debug)]
 pub struct TernaryRegexNode {
@@ -208,6 +208,26 @@ impl TernaryRegexGenerator {
     }
 }
 
+impl RegexGeneratorTrait for TernaryRegexGenerator {
+    fn add(&mut self, word: &[char]) {
+        if word.len() == 0 {
+            return;
+        }
+        self.root = insert(word, 0, self.root.take());
+    }
+
+    fn generate(&self, op: &RegexOperator) -> String {
+        if self.root.is_none() {
+            return String::new();
+        } else {
+            let op_detail = RegexOperatorDetail::get_regex_operator_detail(op);
+            let mut buffer = String::new();
+            generate(& self.root, &mut buffer, &op_detail);
+            return buffer;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -258,5 +278,9 @@ mod tests {
     #[test]
     fn car_cat_can_bar_bat() {
         run_test(&["car", "cat", "can", "bar", "bat"], "(ba[rt]|ca[nrt])");
+    }
+    #[test]
+    fn surrogate_pair() {
+        run_test(&["𠮟", "𠮷"], "[𠮟𠮷]");
     }
 }
