@@ -1,4 +1,3 @@
-extern crate getopts;
 extern crate rustmigemo;
 use getopts::Options;
 use std::env;
