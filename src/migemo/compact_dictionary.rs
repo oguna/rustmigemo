@@ -55,7 +55,7 @@ impl<'a> Iterator for PredictiveSearchIter<'a> {
                 self.key_buffer.clear();
                 self.dict
                     .value_trie
-                    .get_key2(mapping_index as usize, &mut self.key_buffer);
+                    .get_key_into(mapping_index as usize, &mut self.key_buffer);
                 return Some(self.key_buffer.clone());
             }
 

@@ -2,10 +2,10 @@ use super::bit_vector::BitVector;
 
 #[derive(Debug)]
 pub struct LoudsTriePredictiveSearchIter<'a> {
-    pub trie: &'a LoudsTrie,
-    pub upper: usize,
-    pub lower: usize,
-    pub cursor: usize,
+    trie: &'a LoudsTrie,
+    upper: usize,
+    lower: usize,
+    cursor: usize,
 }
 
 impl<'a> Iterator for LoudsTriePredictiveSearchIter<'a> {
@@ -38,9 +38,7 @@ pub struct LoudsTrie {
 
 impl LoudsTrie {
     pub fn get_key(&self, mut index: usize) -> Vec<u16> {
-        if index <= 0 || self.edges.len() <= index {
-            panic!();
-        }
+        assert!(index > 0 && index < self.edges.len(), "get_key: Index {} is out of bounds (1..{})", index, self.edges.len());
         let mut sb: Vec<u16> = Vec::new();
         while index > 1 {
             sb.push(self.edges[index]);
@@ -50,10 +48,8 @@ impl LoudsTrie {
         return sb;
     }
 
-    pub fn get_key2(&self, mut index: usize, target: &mut Vec<u16>) -> usize {
-        if index <= 0 || self.edges.len() <= index {
-            panic!();
-        }
+    pub fn get_key_into(&self, mut index: usize, target: &mut Vec<u16>) -> usize {
+        assert!(index > 0 && index < self.edges.len(), "get_key_into: Index {} is out of bounds (1..{})", index, self.edges.len());
         target.clear();
         while index > 1 {
             target.push(self.edges[index]);
@@ -87,11 +83,10 @@ impl LoudsTrie {
         let child_start_bit = self.bit_vector.select(first_child as usize, true);
         let child_end_bit = self.bit_vector.next_clear_bit(child_start_bit);
         let child_size = child_end_bit - child_start_bit;
-        let result = LoudsTrie::binary_search_uint16(&self.edges, first_child as usize, (first_child as usize) + child_size, c);
-        return match result {
-            Ok(x) => Some(x),
-            Err(_) => None
-        }
+        let children_edges = &self.edges[first_child .. first_child + child_size];
+        children_edges.binary_search(&c)
+            .ok()
+            .map(|pos| first_child + pos)
     }
 
     pub fn get(&self, key: &[u16]) -> Option<usize> {
@@ -187,24 +182,6 @@ impl LoudsTrie {
         };
         let generated_indexes = memo.iter().map(|x| *x as u32).collect();
         return (louds_trie, generated_indexes);
-    }
-
-    fn binary_search_uint16(a: &Vec<u16>, from: usize, to: usize, key: u16) -> Result<usize, usize> {
-        // TODO: slice has binary_search, so we should use it, alternative to this implementation.
-        let mut low = from;
-        let mut high = to - 1;
-        while low <= high {
-            let mid = (low + high) >> 1;
-            let mid_val = a[mid];
-            if mid_val < key {
-                low = mid + 1;
-            } else if mid_val > key {
-                high = mid - 1;
-            } else {
-                return Ok(mid);
-            }
-        }
-        return Err(low + 1);
     }
 }
 
