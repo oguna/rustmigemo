@@ -9,23 +9,23 @@ C/Migemoや他のMigemo実装との性能比較は、[ベンチマーク](https:
 ## ビルド方法
 ### CLI
 ```shell
-cargo build --features cli --release
+> cargo build --features cli --release
 ```
 
 Windowsの場合、`target/release/rustmigemo-cli.exe` にビルドした実行可能ファイルが置かれています。
 
 ### WASM
 `wasm-pack`がインストール済みの状態で、
-```bash
+```shell
 # Nodejs用(examples/node-cliを実行するときに必要)
-wasm-pack build --target nodejs -- --features wasm 
+> wasm-pack build --target nodejs -- --features wasm 
 # Web用(examples/webpageを実行するときに必要)
-wasm-pack build --target web -- --features wasm 
+> wasm-pack build --target web -- --features wasm 
 ```
 
 `pkg/`ディレクトリに生成されます。
 
-### Windows LL
+### Windows DLL
 ```shell
 > cargo build --features windows-dll --target x86_64-pc-windows-msvc --release 
 ```
@@ -65,7 +65,7 @@ PATTERN: (kensaku|けんさく|ケンサク|建策|憲[作冊]|検索|献策|研
 
 ### Nodejs Webpage
 ```bash
-npx serve
+> npx serve
 ```
 
 `http://localhost:3000/examples/webpage/`にブラウザからアクセスし、テキストフィールドにローマ字で検索すると、漢字にヒットする正規表現が出力されます。
