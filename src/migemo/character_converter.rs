@@ -1,42 +1,38 @@
+
 use std::collections::HashMap;
+use std::sync::OnceLock;
+
+static HAN2ZEN_MAP: OnceLock<HashMap<char, char>> = OnceLock::new();
+static ZEN2HAN_MAP: OnceLock<HashMap<char, &'static str>> = OnceLock::new();
+
+fn get_han2zen_map() -> &'static HashMap<char, char> {
+    HAN2ZEN_MAP.get_or_init(|| {
+        HAN2ZEN.iter().cloned().collect()
+    })
+}
+
+fn get_zen2han_map() -> &'static HashMap<char, &'static str> {
+    ZEN2HAN_MAP.get_or_init(|| {
+        ZEN2HAN.iter().cloned().collect()
+    })
+}
 
 pub fn han2zen(source: String) -> String {
-    let mut chars: Vec<char> = source.chars().collect();
-    let mut map: HashMap<char, char> = HashMap::new();
-    for x in HAN2ZEN.iter() {
-        map.insert(x.0, x.1);
-    }
-    for index in 0..chars.len() {
-        let c = chars[index];
-        let r = map.get(&c);
-        if r.is_some() {
-            chars[index] = r.unwrap().clone();
-        }
-    }
-    let mut result = String::new();
-    for c in chars {
-        result.push(c);
-    }
-    return result;
+    let map = get_han2zen_map();
+    source.chars().map(|c| map.get(&c).copied().unwrap_or(c)).collect()
 }
 
 pub fn zen2han(source: String) -> String {
-    let chars: Vec<char> = source.chars().collect();
-    let mut map: HashMap<char, &str> = HashMap::new();
+    let map = get_zen2han_map();
     let mut sb = String::new();
-    for x in ZEN2HAN.iter() {
-        map.insert(x.0, x.1);
-    }
-    for index in 0..chars.len() {
-        let c = chars[index];
-        let r = map.get(&c);
-        if r.is_some() {
-            sb.push_str(r.unwrap());
+    for c in source.chars() {
+        if let Some(&han) = map.get(&c) {
+            sb.push_str(han);
         } else {
             sb.push(c);
         }
     }
-    return sb;
+    sb
 }
 
 pub fn hira2kata(source: &String) -> String {
