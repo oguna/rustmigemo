@@ -195,13 +195,16 @@ impl RomanProcessor {
                 for i in lower..upper {
                     let re = &self.entries[i as usize];
                     if re.remain > 0 {
-                        let set2 = RomanProcessor::find_roman_entry_predicatively(self.indices ,romaji, end - 1 - re.remain);
-                        for re2_idx in set2 {
-                            let re2 = &self.entries[re2_idx];
-                            if re2.remain == 0 {
-                                let mut combined = re.hiragana.to_vec();
-                                combined.extend_from_slice(re2.hiragana);
-                                set.insert(combined);
+                        // Check for underflow before subtraction
+                        if end > re.remain {
+                            let set2 = RomanProcessor::find_roman_entry_predicatively(self.indices ,romaji, end - 1 - re.remain);
+                            for re2_idx in set2 {
+                                let re2 = &self.entries[re2_idx];
+                                if re2.remain == 0 {
+                                    let mut combined = re.hiragana.to_vec();
+                                    combined.extend_from_slice(re2.hiragana);
+                                    set.insert(combined);
+                                }
                             }
                         }
                     } else {
@@ -648,5 +651,10 @@ mod tests {
         let (prefix, suffixes) = romaji_to_hiragana_predictively("denk");
         assert_eq!(prefix, "でん");
         assert!(suffixes.iter().any(|s| s == "か"));
+    }
+
+    #[test]
+    fn romaji_to_hiragana_w() {
+        let (_, _) = romaji_to_hiragana_predictively("w");
     }
 }

@@ -18,8 +18,21 @@ impl<'a> Iterator for LoudsTriePredictiveSearchIter<'a> {
         } else if self.upper == self.lower {
             return None;
         } else {
-            self.lower = self.trie.bit_vector.rank(self.trie.bit_vector.select(self.lower, false)+1, true)+1;
-            self.upper = self.trie.bit_vector.rank(self.trie.bit_vector.select(self.upper, false)+1, true)+1;
+            let lower_select = self.trie.bit_vector.select(self.lower, false);
+            let upper_select = self.trie.bit_vector.select(self.upper, false);
+            
+            if lower_select + 1 <= self.trie.bit_vector.size() {
+                self.lower = self.trie.bit_vector.rank(lower_select + 1, true) + 1;
+            } else {
+                self.lower = self.trie.bit_vector.rank(self.trie.bit_vector.size(), true) + 1;
+            }
+            
+            if upper_select + 1 <= self.trie.bit_vector.size() {
+                self.upper = self.trie.bit_vector.rank(upper_select + 1, true) + 1;
+            } else {
+                self.upper = self.trie.bit_vector.rank(self.trie.bit_vector.size(), true) + 1;
+            }
+            
             self.cursor = self.lower;
             if self.lower == self.upper {
                 return None

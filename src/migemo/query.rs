@@ -8,7 +8,7 @@ use std::str::CharIndices;
 use std::char::{decode_utf16, REPLACEMENT_CHARACTER};
 
 pub fn query_a_word(word: &str, dict: &CompactDictionary, operator: &RegexOperator) -> String {
-    query_a_word_with_generator(word, dict, operator, &mut RegexGenerator { root: None })
+    query_a_word_with_generator(word, dict, operator, &mut TernaryRegexGenerator::new())
 }
 
 pub fn query_a_word_with_generator<T: RegexGeneratorTrait>(
@@ -63,10 +63,6 @@ pub fn query_a_word_with_generator<T: RegexGeneratorTrait>(
     }
     let generated = generator.generate(&operator);
     return generated;
-}
-
-pub fn query_a_word_with_ternary(word: &str, dict: &CompactDictionary, operator: &RegexOperator) -> String {
-    query_a_word_with_generator(word, dict, operator, &mut TernaryRegexGenerator::new())
 }
 
 pub fn query(word: String, dict: &CompactDictionary, operator: &RegexOperator) -> String {

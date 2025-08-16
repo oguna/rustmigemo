@@ -61,7 +61,7 @@ impl<'a> Iterator for PredictiveSearchIter<'a> {
 
             let dict = self.dict;
             let next_values = self.key_node_indices.find_map(|node_index| {
-                if dict.has_mapping_bit_list.get(node_index) {
+                if node_index < dict.has_mapping_bit_list.len() && dict.has_mapping_bit_list.get(node_index) {
                     let value_start_pos = dict.mapping_bit_vector.select(node_index, false);
                     let value_end_pos = dict
                         .mapping_bit_vector
@@ -143,9 +143,9 @@ impl CompactDictionary {
 
     fn create_mapping_bit_list(bit_vector: &BitVector) -> BitList {
         let num_of_nodes = bit_vector.rank(bit_vector.size(), false);
-        let mut bit_list = BitList::new_with_size(num_of_nodes);
+        let mut bit_list = BitList::new_with_size(num_of_nodes + 1);
         let mut bit_position = 0;
-        for node in 1..num_of_nodes {
+        for node in 1..=num_of_nodes {
             let has_mapping = bit_vector.get(bit_position + 1);
             bit_list.set(node, has_mapping);
             bit_position = bit_vector.next_clear_bit(bit_position + 1)
