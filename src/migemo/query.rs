@@ -10,12 +10,9 @@ pub fn query_a_word(word: &str, dict: &CompactDictionary, operator: &RegexOperat
     let mut generator = RegexGenerator { root: None };
     generator.add(&utf16word);
     let lower: Vec<u16> = word.to_lowercase().encode_utf16().collect();
-    /*
     for elem in dict.predictive_search(&lower) {
         generator.add(&elem);
     }
-    */
-    dict.predictive_search(&lower, &mut generator);
     let zen: Vec<u16> = han2zen(word.to_string()).encode_utf16().collect();
     generator.add(&zen);
     let han: Vec<u16> = zen2han(word.to_string()).encode_utf16().collect();
@@ -27,16 +24,13 @@ pub fn query_a_word(word: &str, dict: &CompactDictionary, operator: &RegexOperat
         let mut hira = hiragana.prefix.clone();
         hira.extend(suffix);
         generator.add(&hira);
-        /*
-        for elem in dict.predictive_search(&hira).iter() {
-            generator.add(elem);
+        for elem in dict.predictive_search(&hira) {
+            generator.add(&elem);
         }
-        */
-        dict.predictive_search(&hira, &mut generator);
         let kata = hira2kata(&String::from_utf16_lossy(&hira));
         let u16kata: Vec<u16> = kata.encode_utf16().collect();
         generator.add(&u16kata);
-        let u16zen = zen2han(kata).encode_utf16().collect();
+        let u16zen: Vec<u16> = zen2han(kata).encode_utf16().collect();
         generator.add(&u16zen);
     }
     let generated = generator.generate(&operator);

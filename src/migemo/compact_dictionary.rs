@@ -1,7 +1,6 @@
 use super::bit_vector::BitVector;
 use super::bit_list::BitList;
 use super::louds_trie::LoudsTrie;
-use super::regex_generator::RegexGenerator;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::Cursor;
 
@@ -33,6 +32,57 @@ impl<'a> Iterator for SearchIter<'a> {
             ));
         } else {
             return None;
+        }
+    }
+}
+
+pub struct PredictiveSearchIter<'a> {
+    dict: &'a CompactDictionary,
+    // key_trieから前方一致で得られたノードIDのイテレータ
+    key_node_indices: std::vec::IntoIter<usize>,
+    // 現在のキーノードが持つ、値IDのリスト
+    current_values: std::vec::IntoIter<u32>,
+    // 値を取得する際に再利用するバッファ
+    key_buffer: Vec<u16>,
+}
+
+impl<'a> Iterator for PredictiveSearchIter<'a> {
+    type Item = Vec<u16>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(mapping_index) = self.current_values.next() {
+                self.key_buffer.clear();
+                self.dict
+                    .value_trie
+                    .get_key2(mapping_index as usize, &mut self.key_buffer);
+                return Some(self.key_buffer.clone());
+            }
+
+            let dict = self.dict;
+            let next_values = self.key_node_indices.find_map(|node_index| {
+                if dict.has_mapping_bit_list.get(node_index) {
+                    let value_start_pos = dict.mapping_bit_vector.select(node_index, false);
+                    let value_end_pos = dict
+                        .mapping_bit_vector
+                        .next_clear_bit(value_start_pos + 1);
+                    let size = value_end_pos - value_start_pos - 1;
+
+                    if size > 0 {
+                        let offset = dict.mapping_bit_vector.rank(value_start_pos, false);
+                        let start = value_start_pos - offset;
+                        let end = start + size;
+                        return Some(dict.mapping[start..end].to_vec().into_iter());
+                    }
+                }
+                None
+            });
+
+            if let Some(values) = next_values {
+                self.current_values = values;
+            } else {
+                return None;
+            }
         }
     }
 }
@@ -140,27 +190,24 @@ impl CompactDictionary {
         };
     }
 
-    pub fn predictive_search(&self, key: &Vec<u16>, rxgen: &mut RegexGenerator) -> usize {
-        let key_index = self.key_trie.get(key);
-        let mut key: Vec<u16> = Vec::with_capacity(10);
-        let mut count = 0;
-        if key_index.is_some() && key_index.unwrap() > 1 {
-            let key_index = key_index.unwrap();
-            for i in self.key_trie.predictive_search(key_index) {
-                if self.has_mapping_bit_list.get(i) {
-                let value_start_pos = self.mapping_bit_vector.select(i as usize, false);
-                let value_end_pos = self.mapping_bit_vector.next_clear_bit(value_start_pos + 1);
-                let size = value_end_pos - value_start_pos - 1;
-                let offset = self.mapping_bit_vector.rank(value_start_pos, false);
-                for j in 0..size {
-                    self.value_trie.get_key2(self.mapping[value_start_pos - (offset as usize) + (j as usize)] as usize, &mut key);
-                    rxgen.add(&key);
-                    count = count + 1;
-                }
-                }
+    pub fn predictive_search<'a>(&'a self, key: &[u16]) -> PredictiveSearchIter<'a> {
+        // TODO: ノードIDのリストを取得してからイテレータを生成しているため、半遅延評価であり、効率が悪い
+        let key_node_indices_vec = if let Some(key_index) = self.key_trie.get(key) {
+            if key_index > 1 {
+                self.key_trie.predictive_search(key_index).into_iter().collect()
+            } else {
+                Vec::new()
             }
+        } else {
+            Vec::new()
+        };
+
+        PredictiveSearchIter {
+            dict: self,
+            key_node_indices: key_node_indices_vec.into_iter(),
+            current_values: Vec::new().into_iter(),
+            key_buffer: Vec::with_capacity(16),
         }
-        return count;
     }
 }
 

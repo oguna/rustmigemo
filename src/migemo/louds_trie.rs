@@ -94,7 +94,7 @@ impl LoudsTrie {
         }
     }
 
-    pub fn get(&self, key: &Vec<u16>) -> Option<usize> {
+    pub fn get(&self, key: &[u16]) -> Option<usize> {
         let mut node_index = 1;
         for c in key {
             let result = self.traverse(node_index as u32, *c);
@@ -217,7 +217,8 @@ mod tests {
         let words: Vec<Vec<u16>> = vec!["baby", "bad", "bank", "box", "dad", "dance"].iter().map(|x| x.encode_utf16().collect()).collect();
         let (trie, x) = LoudsTrie::build(&words);
         println!("{:?}", x);
-        let actual = trie.get(&"box".encode_utf16().collect());
+        let box_utf16: Vec<u16> = "box".encode_utf16().collect();
+        let actual = trie.get(&box_utf16);
         assert_eq!(actual, Some(10));
         assert_eq!(trie.bit_vector.words(), vec![1145789805]);
         assert_eq!(trie.bit_vector.size(), 32);

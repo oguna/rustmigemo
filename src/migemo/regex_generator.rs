@@ -100,7 +100,7 @@ pub struct RegexGenerator {
 }
 
 impl RegexGenerator {
-	pub fn add(&mut self, word: &Vec<u16>) {
+	pub fn add(&mut self, word: &[u16]) {
 		if word.len() == 0 {
 			return;
 		}
