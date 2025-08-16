@@ -1,16 +1,26 @@
+use std::arch::x86_64::_pdep_u64;
+use std::sync::OnceLock;
+
+type SelectFn = unsafe fn(u64, usize) -> usize;
+
+static SELECT_FN: OnceLock<SelectFn> = OnceLock::new();
+
 #[derive(Debug)]
 pub struct BitVector {
-    pub words: Vec<u64>,
-    pub size_in_bits: usize,
-    pub lb: Vec<u32>,
-    pub sb: Vec<u16>,
+    words: Vec<u64>,
+    size_in_bits: usize,
+    lb: Vec<u32>,
+    sb: Vec<u16>,
 }
 
 impl BitVector {
     pub fn new(words: Vec<u64>, size_in_bits: usize) -> BitVector {
-        if (size_in_bits + 63) / 64 != words.len() {
-            panic!()
-        }
+        assert!(
+            (size_in_bits + 63) / 64 == words.len(),
+            "Word vector length does not match the size in bits. Expected {}, got {}.",
+            (size_in_bits + 63) / 64,
+            words.len()
+        );
         let mut lb: Vec<u32> = vec![0; (size_in_bits + 511) / 512];
         let mut sb: Vec<u16> = vec![0; lb.len() * 8];
         let mut sum: u32 = 0;
@@ -29,7 +39,7 @@ impl BitVector {
                 sum_in_lb = 0;
             }
         }
-        return BitVector {
+        BitVector {
             words: words,
             size_in_bits: size_in_bits,
             lb: lb,
@@ -38,9 +48,7 @@ impl BitVector {
     }
 
     pub fn rank(&self, pos: usize, b: bool) -> usize {
-        if self.size_in_bits <= pos {
-            //panic!();
-        }
+        assert!(pos <= self.size_in_bits, "pos is out of bounds for rank");
         let mut count1 = self.sb[(pos / 64) as usize] as usize + self.lb[(pos / 512) as usize] as usize;
         let word = self.words[(pos / 64) as usize];
         let shift_size = 64 - (pos & 63);
@@ -54,6 +62,7 @@ impl BitVector {
     }
 
     pub fn select(&self, count: usize, b: bool) -> usize {
+        assert!(count > 0, "select() requires a 1-indexed count, but got 0.");
         let lb_index = self.lower_bound_binary_search_lb(count as u32, b) - 1;
         let count_in_lb: usize = if b {
             count - self.lb[lb_index as usize] as usize
@@ -70,10 +79,33 @@ impl BitVector {
         if !b {
             word = !word;
         }
-        return sb_index * 64 + BitVector::select_in_word(word, count_in_sb);
+        let func = SELECT_FN.get_or_init(|| {
+            if is_x86_feature_detected!("bmi2") {
+                BitVector::select_in_word_pdep
+            } else {
+                BitVector::select_in_word
+            }
+        });
+        return sb_index * 64 + unsafe {func(word, count_in_sb)} as usize;
+    }
+
+    unsafe fn select_in_word_pdep(word: u64, count: usize) -> usize {
+        let k_th_bit = 1_u64 << (count - 1);
+        let isolated_bit = _pdep_u64(k_th_bit, word);
+        isolated_bit.trailing_zeros() as usize
     }
 
     fn select_in_word(mut word: u64, mut count: usize) -> usize {
+        // 1. countは1以上でなければならない
+        assert!(count > 0, "count must be greater than 0 for select_in_word");
+
+        // 2. word内の1の数がcount以上でなければならない
+        assert!(
+            word.count_ones() as usize >= count,
+            "word (popcount: {}) has fewer than the required {} bits",
+            word.count_ones(),
+            count
+        );
         let lower_bit_count = u32::count_ones(word as u32) as usize;
         let mut i = 0;
         if lower_bit_count < count {
@@ -106,7 +138,7 @@ impl BitVector {
         }
         return i - 1;
     }
-    
+
     fn lower_bound_binary_search_lb(&self, key: u32, b: bool) -> usize {
         let mut high = self.lb.len() as isize;
         let mut low: isize = -1;
@@ -180,12 +212,18 @@ impl BitVector {
     }
 
     pub fn get(&self, pos: usize) -> bool {
-        if self.size_in_bits < pos {
-            panic!();
-        }
+        assert!(
+            pos < self.size_in_bits,
+            "get() access out of bounds: pos (is {}) must be less than size_in_bits (is {})",
+            pos,
+            self.size_in_bits
+        );
         return ((self.words[(pos >> 6) as usize] >> (pos & 63)) & 1) == 1;
     }
 
+    pub fn words(&self) -> &[u64] {
+        &self.words
+    }
 }
 
 

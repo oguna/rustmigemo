@@ -55,7 +55,7 @@ impl CompactDictionary {
         for i in 0..mapping_size {
             mapping[i as usize] = cursor.read_u32::<BigEndian>().unwrap();
         }
-        let has_mapping_bit_list = CompactDictionary::craete_mapping_bit_list(&mapping_bit_vector);
+        let has_mapping_bit_list = CompactDictionary::create_mapping_bit_list(&mapping_bit_vector);
         return CompactDictionary {
             key_trie: key_trie,
             value_trie: value_trie,
@@ -91,8 +91,8 @@ impl CompactDictionary {
         return louds_trie;
     }
 
-    fn craete_mapping_bit_list(bit_vector: &BitVector) -> BitList {
-        let num_of_nodes = bit_vector.rank(bit_vector.size()+1, false);
+    fn create_mapping_bit_list(bit_vector: &BitVector) -> BitList {
+        let num_of_nodes = bit_vector.rank(bit_vector.size(), false);
         let mut bit_list = BitList::new_with_size(num_of_nodes);
         let mut bit_position = 0;
         for node in 1..num_of_nodes {

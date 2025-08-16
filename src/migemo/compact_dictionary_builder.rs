@@ -94,8 +94,8 @@ pub fn build(mut dict: HashMap<String, Vec<String>>) -> Vec<u8> {
         output_data.write_u8(compact_char as u8).unwrap();
     }
     output_data.write_i32::<BigEndian>(key_trie.bit_vector.size() as i32).unwrap();
-    for word in key_trie.bit_vector.words {
-        output_data.write_u64::<BigEndian>(word).unwrap();
+    for word in key_trie.bit_vector.words() {
+        output_data.write_u64::<BigEndian>(*word).unwrap();
     }
 
     // output value trie
@@ -104,8 +104,8 @@ pub fn build(mut dict: HashMap<String, Vec<String>>) -> Vec<u8> {
         output_data.write_u16::<BigEndian>(edge).unwrap();
     }
     output_data.write_i32::<BigEndian>(value_trie.bit_vector.size() as i32).unwrap();
-    for word in value_trie.bit_vector.words {
-        output_data.write_u64::<BigEndian>(word).unwrap();
+    for word in value_trie.bit_vector.words() {
+        output_data.write_u64::<BigEndian>(*word).unwrap();
     }
 
     // output mapping
