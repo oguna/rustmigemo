@@ -1,46 +1,65 @@
 use std::collections::HashSet;
+use std::sync::OnceLock;
 
-struct RomanEntry {
-    roman: Vec<u16>,
-    hiragana: Vec<u16>,
+#[derive(Debug, Clone)]
+struct RomanEntry<'a> {
+    roman: &'a [u16],
+    hiragana: &'a [u16],
     remain: usize,
     index: u32,
 }
 
-impl RomanEntry {
-    pub fn new(roman: String, hiragana: String, remain: usize) -> RomanEntry {
-        let u16roman: Vec<u16> = roman.chars().map(|c| c as u16).collect();
-        let u16hiragana: Vec<u16> = hiragana.chars().map(|c| c as u16).collect();
-        let index = RomanEntry::calculate_index(u16roman.as_ref());
-        return RomanEntry {
-            roman: u16roman,
-            hiragana: u16hiragana,
-            remain,
-            index,
-        };
-    }
-
-    fn _calculate_index(roman: &Vec<u16>, start: usize, end: usize) -> u32 {
+impl<'a> RomanEntry<'a> {
+    fn _calculate_index(roman: &[u16], start: usize, end: usize) -> u32 {
         let mut result: u32 = 0;
-        for i in 0..4 {
+        const MAX_CHARS_FOR_INDEX: usize = 4;
+        const BITS_PER_CHAR: u32 = 8;
+        for i in 0..MAX_CHARS_FOR_INDEX {
             let index = i + start;
             let c: u16 = if index < roman.len() && index < end {
                 roman[index]
             } else {
                 0
             };
-            result = result | (c as u32);
-            if i < 3 {
-                result = result << 8;
+            result |= c as u32;
+            if i < MAX_CHARS_FOR_INDEX - 1 {
+                result <<= BITS_PER_CHAR;
             }
         }
-        return result;
+        result
     }
 
-    pub fn calculate_index(roman: &Vec<u16>) -> u32 {
-        return RomanEntry::_calculate_index(roman, 0, 4);
+    pub fn calculate_index(roman: &[u16]) -> u32 {
+        RomanEntry::_calculate_index(roman, 0, 4)
     }
 }
+
+static ROMAN_TABLE: OnceLock<(Vec<RomanEntry<'static>>, Vec<u32>)> = OnceLock::new();
+
+fn get_roman_table() -> &'static (Vec<RomanEntry<'static>>, Vec<u32>) {
+    ROMAN_TABLE.get_or_init(|| {
+        let mut entries: Vec<RomanEntry<'static>> = ROMAN_ENTRIES.iter()
+            .map(|(roman_str, hiragana_str, remain)| {
+                let roman: &'static [u16] = Box::leak(roman_str.encode_utf16().collect::<Vec<_>>().into_boxed_slice());
+                let hiragana: &'static [u16] = Box::leak(hiragana_str.encode_utf16().collect::<Vec<_>>().into_boxed_slice());
+                
+                RomanEntry {
+                    roman,
+                    hiragana,
+                    remain: *remain,
+                    index: RomanEntry::calculate_index(roman),
+                }
+            })
+            .collect();
+
+        entries.sort_by_key(|e| e.index);
+
+        let indices = entries.iter().map(|e| e.index).collect();
+
+        (entries, indices)
+    })
+}
+
 
 pub struct RomajiPredictiveResult {
     pub prefix: Vec<u16>,
@@ -48,45 +67,38 @@ pub struct RomajiPredictiveResult {
 }
 
 pub struct RomanProcessor {
-    entries: Vec<RomanEntry>,
-    indices: Vec<u32>,
+    entries: &'static [RomanEntry<'static>],
+    indices: &'static [u32],
 }
 
 impl RomanProcessor {
     pub fn new() -> RomanProcessor {
-        let mut entries: Vec<RomanEntry> = ROMAN_ENTRIES.iter()
-        .map(|x| RomanEntry::new(String::from(x.0), String::from(x.1), x.2))
-        .collect();
-        entries.sort_by_key(|x| x.index);
-        let mut indices = vec![0; entries.len()];
-        for i in 0..entries.len() {
-            indices[i] = entries[i].index;
-        }
-        return RomanProcessor {
-            entries,
-            indices,
+        let table = get_roman_table();
+        RomanProcessor {
+            entries: &table.0,
+            indices: &table.1,
         }
     }
 
-    fn binary_search(a: &Vec<u32>, from_index: usize, to_index: usize, key: u32) -> isize {
+    fn binary_search(a: &[u32], from_index: usize, to_index: usize, key: u32) -> isize {
         let mut low = from_index as isize;
         let mut high = to_index as isize - 1;
         while low <= high {
-            let mid: isize = ((low + high) >> 1) as isize;
+            let mid = low + (high - low) / 2;
             let mid_val = a[mid as usize];
             if mid_val < key {
                 low = mid + 1;
             } else if mid_val > key {
                 high = mid - 1;
             } else {
-                return mid as isize;
+                return mid;
             }
         }
-        return -(low + 1);
+        -(low + 1)
     }
 
-    pub fn romaji_to_hiragana(self, romaji: &Vec<u16>) -> Vec<u16> {
-        if romaji.len() == 0 {
+    pub fn romaji_to_hiragana(&self, romaji: &[u16]) -> Vec<u16> {
+        if romaji.is_empty() {
             return Vec::new();
         }
         let mut hiragana = Vec::new();
@@ -98,34 +110,34 @@ impl RomanProcessor {
             let mut upper: isize = self.indices.len() as isize;
             while upper - lower > 1 && end <= romaji.len() {
                 let lower_key = RomanEntry::_calculate_index(romaji, start, end);
-                lower = RomanProcessor::binary_search(self.indices.as_ref(), lower as usize, upper as usize, lower_key);
+                lower = RomanProcessor::binary_search(self.indices, lower as usize, upper as usize, lower_key);
                 if lower >= 0 {
                     last_found = lower;
                 } else {
                     lower = -lower - 1;
                 }
                 let upper_key = lower_key + (1 << (32 - 8 * (end - start)));
-                upper = RomanProcessor::binary_search(self.indices.as_ref(), lower as usize, upper as usize, upper_key);
+                upper = RomanProcessor::binary_search(self.indices, lower as usize, upper as usize, upper_key);
                 if upper < 0 {
                     upper = -upper - 1;
                 }
-                end = end + 1;
+                end += 1;
             }
             if last_found >= 0 {
                 let entry = &self.entries[last_found as usize];
-                hiragana.extend(entry.hiragana.clone());
-                start = start + entry.roman.len() - entry.remain;
+                hiragana.extend_from_slice(entry.hiragana);
+                start += entry.roman.len() - entry.remain;
                 end = start + 1;
             } else {
                 hiragana.push(romaji[start]);
-                start = start + 1;
+                start += 1;
                 end = start + 1;
             }
         }
-        return hiragana;
+        hiragana
     }
 
-    fn find_roman_entry_predicatively(indices: &Vec<u32>, roman: &Vec<u16>, offset: usize) -> Vec<usize>  {
+    fn find_roman_entry_predicatively(indices: &[u32], roman: &[u16], offset: usize) -> Vec<usize>  {
         let mut start_index: isize = 0;
         let mut end_index: isize = indices.len() as isize;
         for i in 0..4 {
@@ -146,15 +158,11 @@ impl RomanProcessor {
                 return vec![start_index as usize];
             }
         }
-        let mut result = Vec::new();
-        for i in start_index..end_index {
-            result.push(i as usize);
-        }
-        return result;
+        (start_index..end_index).map(|i| i as usize).collect()
     }
 
-    pub fn romaji_to_hiragana_predictively(&self, romaji: &Vec<u16>) -> RomajiPredictiveResult {
-        if romaji.len() == 0 {
+    pub fn romaji_to_hiragana_predictively(&self, romaji: &[u16]) -> RomajiPredictiveResult {
+        if romaji.is_empty() {
             return RomajiPredictiveResult {
                 prefix: vec![],
                 suffixes: vec![vec![]],
@@ -169,56 +177,58 @@ impl RomanProcessor {
             let mut upper: isize = self.indices.len() as isize;
             while upper - lower > 1 && end <= romaji.len() {
                 let lower_key = RomanEntry::_calculate_index(romaji, start, end);
-                lower = RomanProcessor::binary_search(&self.indices, lower as usize, upper as usize, lower_key);
+                lower = RomanProcessor::binary_search(self.indices, lower as usize, upper as usize, lower_key);
                 if lower >= 0 {
                     last_found = lower;
                 } else {
                     lower = -lower - 1;
                 }
                 let upper_key = lower_key + (1 << (32 - 8 * (end - start)));
-                upper = RomanProcessor::binary_search(&self.indices, lower as usize, upper as usize, upper_key);
+                upper = RomanProcessor::binary_search(self.indices, lower as usize, upper as usize, upper_key);
                 if upper < 0 {
                     upper = -upper - 1;
                 }
-                end = end + 1;
+                end += 1;
             }
             if end > romaji.len() && upper - lower > 1 {
                 let mut set: HashSet<Vec<u16>> = HashSet::new();
                 for i in lower..upper {
                     let re = &self.entries[i as usize];
                     if re.remain > 0 {
-                        let set2 = RomanProcessor::find_roman_entry_predicatively(&self.indices ,romaji, end - 1 - re.remain);
-                        for re2 in set2 {
-                            if self.entries[re2.clone()].remain == 0 {
-                                set.insert([&re.hiragana[..], &self.entries[re2.clone()].hiragana[..]].concat());
+                        let set2 = RomanProcessor::find_roman_entry_predicatively(self.indices ,romaji, end - 1 - re.remain);
+                        for re2_idx in set2 {
+                            let re2 = &self.entries[re2_idx];
+                            if re2.remain == 0 {
+                                let mut combined = re.hiragana.to_vec();
+                                combined.extend_from_slice(re2.hiragana);
+                                set.insert(combined);
                             }
                         }
                     } else {
-                        set.insert(re.hiragana.clone());
+                        set.insert(re.hiragana.to_vec());
                     }
                 }
                 return RomajiPredictiveResult {
                     prefix: hiragana,
-                    suffixes: set.iter().cloned().collect(),
+                    suffixes: set.into_iter().collect(),
                 };
             }
             if last_found >= 0 {
                 let entry = &self.entries[last_found as usize];
-                hiragana.extend(entry.hiragana.clone());
-                start = start + entry.roman.len() - entry.remain;
+                hiragana.extend_from_slice(entry.hiragana);
+                start += entry.roman.len() - entry.remain;
                 end = start + 1;
             } else {
                 hiragana.push(romaji[start]);
-                start = start + 1;
+                start += 1;
                 end = start + 1;
             }
         }
-        return RomajiPredictiveResult {
+        RomajiPredictiveResult {
             prefix: hiragana,
             suffixes: vec![vec![]],
-        };
+        }
     }
-
 }
 
 const ROMAN_ENTRIES: [(&str, &str, usize); 312] = [
@@ -544,7 +554,7 @@ mod tests {
         let processor = RomanProcessor::new();
         let kensaku: Vec<u16> = romaji.encode_utf16().collect();
         let actual: Vec<u16> = processor.romaji_to_hiragana(&kensaku);
-        return String::from_utf16(&actual).unwrap();
+        String::from_utf16(&actual).unwrap()
     }
 
     #[test]
@@ -594,55 +604,49 @@ mod tests {
         let kensaku: Vec<u16> = romaji.encode_utf16().collect();
         let actual = processor.romaji_to_hiragana_predictively(&kensaku);
         let prefix = String::from_utf16(&actual.prefix).unwrap();
-        let suffixes = actual.suffixes.iter().map(|x| String::from_utf16(x).unwrap()).collect();
-        return (prefix, suffixes);
+        let mut suffixes: Vec<String> = actual.suffixes.iter().map(|x| String::from_utf16(x).unwrap()).collect();
+        suffixes.sort();
+        (prefix, suffixes)
     }
 
     #[test]
     fn romaji_to_hiragana_predictively_1() {
-        let actual = romaji_to_hiragana_predictively("kiku");
-        assert_eq!(actual.0, "きく");
-        assert_eq!(actual.1.len(), 1);
-        assert_eq!(actual.1[0], "");
+        let (prefix, suffixes) = romaji_to_hiragana_predictively("kiku");
+        assert_eq!(prefix, "きく");
+        assert_eq!(suffixes.len(), 1);
+        assert_eq!(suffixes[0], "");
     }
 
     #[test]
     fn romaji_to_hiragana_predictively_2() {
-        let actual = romaji_to_hiragana_predictively("ky");
-        let expected_suffixes = vec!["きゃ", "きぃ", "きぇ", "きゅ", "きょ"];
-        assert_eq!(actual.0, "");
-        assert_eq!(actual.1.len(), expected_suffixes.len());
-        for expected_suffix in expected_suffixes {
-            assert!(actual.1.contains(&expected_suffix.to_string()));
-        }
+        let (prefix, suffixes) = romaji_to_hiragana_predictively("ky");
+        let mut expected_suffixes = vec!["きゃ", "きぃ", "きぇ", "きゅ", "きょ"];
+        expected_suffixes.sort();
+        assert_eq!(prefix, "");
+        assert_eq!(suffixes, expected_suffixes);
     }
 
     #[test]
-    fn romaji_to_hiragana_predictively_3() {
-        let actual = romaji_to_hiragana_predictively("kky");
-        let expected_suffixes = vec!["きゃ", "きぃ", "きぇ", "きゅ", "きょ"];
-        assert_eq!(actual.0, "っ");
-        assert_eq!(actual.1.len(), expected_suffixes.len());
-        for expected_suffix in expected_suffixes {
-            assert!(actual.1.contains(&expected_suffix.to_string()));
-        }
+    fn romaji_to_hiragana_predictively_3() {        let (prefix, suffixes) = romaji_to_hiragana_predictively("kky");
+        let mut expected_suffixes = vec!["きゃ", "きぃ", "きぇ", "きゅ", "きょ"];
+        expected_suffixes.sort();
+        assert_eq!(prefix, "っ");
+        assert_eq!(suffixes, expected_suffixes);
     }
 
     #[test]
     fn romaji_to_hiragana_predictively_4() {
-        let actual = romaji_to_hiragana_predictively("n");
-        let expected_suffixes = vec!["にょ", "の", "にゃ", "ぬ", "ね", "な", "にぇ", "にゅ", "に", "ん", "にぃ"];
-        assert_eq!(actual.0, "");
-        assert_eq!(actual.1.len(), expected_suffixes.len());
-        for expected_suffix in expected_suffixes {
-            assert!(actual.1.contains(&expected_suffix.to_string()));
-        }
+        let (prefix, suffixes) = romaji_to_hiragana_predictively("n");
+        let mut expected_suffixes = vec!["にょ", "の", "にゃ", "ぬ", "ね", "な", "にぇ", "にゅ", "に", "ん", "にぃ"];
+        expected_suffixes.sort();
+        assert_eq!(prefix, "");
+        assert_eq!(suffixes, expected_suffixes);
     }
 
     #[test]
     fn romaji_to_hiragana_predictively_5() {
-        let actual = romaji_to_hiragana_predictively("denk");
-        assert_eq!(actual.0, "でん");
-        assert!(actual.1.contains(&"か".to_string()));
+        let (prefix, suffixes) = romaji_to_hiragana_predictively("denk");
+        assert_eq!(prefix, "でん");
+        assert!(suffixes.iter().any(|s| s == "か"));
     }
 }
