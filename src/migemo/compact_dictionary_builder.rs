@@ -65,10 +65,10 @@ pub fn build(mut dict: HashMap<String, Vec<String>>) -> Vec<u8> {
     let mut mapping_bit_list = BitList::new();
     for i in 1..=key_trie.size() + 1 {
         let key = key_trie.get_key(i);
-        mapping_bit_list.add(false);
+        mapping_bit_list.push(false);
         if let Some(values) = dict.get(&String::from_utf16_lossy(&key)) {
             for j in 0..values.len() {
-                mapping_bit_list.add(true);
+                mapping_bit_list.push(true);
                 let a: Vec<u16> = values[j].encode_utf16().collect();
                 mapping[mapping_index] = value_trie.get(&a).unwrap() as u32;
                 mapping_index += 1;
@@ -81,7 +81,7 @@ pub fn build(mut dict: HashMap<String, Vec<String>>) -> Vec<u8> {
         8 + key_trie.edges.len() + ((key_trie.bit_vector.size() + 63) >> 6) * 8;
     let value_trie_data_size =
         8 + value_trie.edges.len() * 2 + ((value_trie.bit_vector.size() + 63) >> 6) * 8;
-    let mapping_data_size = 8 + ((mapping_bit_list.size + 63) >> 6) * 8 + mapping.len() * 4;
+    let mapping_data_size = 8 + ((mapping_bit_list.len() + 63) >> 6) * 8 + mapping.len() * 4;
     let output_data_size = key_trie_data_size + value_trie_data_size + mapping_data_size;
 
     // ready output
@@ -109,10 +109,10 @@ pub fn build(mut dict: HashMap<String, Vec<String>>) -> Vec<u8> {
     }
 
     // output mapping
-    output_data.write_i32::<BigEndian>(mapping_bit_list.size as i32).unwrap();
-    let mapping_words_len = (mapping_bit_list.size + 63) >> 6;
+    output_data.write_i32::<BigEndian>(mapping_bit_list.len() as i32).unwrap();
+    let mapping_words_len = (mapping_bit_list.len() + 63) >> 6;
     for i in 0..mapping_words_len {
-        output_data.write_u64::<BigEndian>(mapping_bit_list.words[i]).unwrap();
+        output_data.write_u64::<BigEndian>(mapping_bit_list.words()[i]).unwrap();
     }
     output_data.write_i32::<BigEndian>(mapping.len() as i32).unwrap();
     for value in mapping {
