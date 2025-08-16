@@ -8,7 +8,7 @@ C/Migemoや他のMigemo実装との性能比較は、[ベンチマーク](https:
 
 ## ビルド方法
 ### CLI
-```bash
+```shell
 cargo build --features cli --release
 ```
 
@@ -25,6 +25,11 @@ wasm-pack build --target web -- --features wasm
 
 `pkg/`ディレクトリに生成されます。
 
+### Windows LL
+```shell
+> cargo build --features windows-dll --target x86_64-pc-windows-msvc --release 
+```
+
 ## 使い方
 
 ### CLI
@@ -34,7 +39,7 @@ rustmigemoの利用には、辞書ファイルが必要です。
 から `migemo-compact-dict` をダウンロードし、
 作業フォルダ（シェルのカレントディレクトリ）に配置してください。
 
-```
+```shell
 > .\rustmigemo-cli.exe -h
 Usage: C:\...\rustmigemo-cli.exe [options]
 
@@ -52,7 +57,7 @@ Options:
 ```
 
 ### Nodejs CLI
-```bash
+```shell
 > node .\examples\node-cli\index.js
 QUERY: kensaku
 PATTERN: (kensaku|けんさく|ケンサク|建策|憲[作冊]|検索|献策|研削|羂索|ｋｅｎｓａｋｕ|ｹﾝｻｸ)
@@ -69,6 +74,11 @@ npx serve
 [__kensaku__]
 (kensaku|けんさく|ケンサク|建策|憲[作冊]|検索|献策|研削|羂索|ｋｅｎｓａｋｕ|ｹﾝｻｸ)
 ```
+
+### Windows DLL
+以下のサンプルをご確認ください。
+- `examples\MigemoConsole.cpp`
+- `examples\MigemoConsole.cs`
 
 ## ライセンス
 
