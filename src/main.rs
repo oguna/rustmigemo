@@ -1,63 +1,67 @@
 extern crate rustmigemo;
-use getopts::Options;
 use std::env;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
+use std::io::BufReader;
 use std::io::Read;
 use std::io::Write;
-use std::io::BufReader;
 use std::net::TcpListener;
 use std::net::TcpStream;
 
 use rustmigemo::migemo::compact_dictionary::*;
 use rustmigemo::migemo::query::*;
 use rustmigemo::migemo::regex_generator::*;
+use pico_args::Arguments;
 
-fn print_usage(program: &str, opts: Options) {
+fn print_usage(program: &str) {
     let brief = format!("Usage: {} [options]", program);
-    print!("{}", opts.usage(&brief));
+    println!("{}", brief);
+    println!("\nOptions:");
+    println!("  -d, --dict <dict>    Use a file <dict> for dictionary. (default: migemo-compact-dict)");
+    println!("  -q, --quiet          Show no message except results.");
+    println!("  -v, --vim            Use vim style regexp.");
+    println!("  -e, --emacs          Use emacs style regexp.");
+    println!("  -n, --nonewline      Don't use newline match.");
+    println!("  -w, --word <word>    Expand a <word> and soon exit.");
+    println!("  -p, --port <port>    Listen on <port> for query via http.");
+    println!("  -h, --help           Show this message.");
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let program = args[0].clone();
-    let mut opts = Options::new();
-    opts.optopt(
-        "d",
-        "dict",
-        "Use a file <dict> for dictionary. (default: migemo-compact-dict)",
-        "<dict>",
-    );
-    opts.optflag("q", "quiet", "Show no message except results.");
-    opts.optflag("v", "vim", "Use vim style regexp.");
-    opts.optflag("e", "emacs", "Use emacs style regexp.");
-    opts.optflag("n", "nonewline", "Don't use newline match.");
-    opts.optopt("w", "word", "Expand a <word> and soon exit.", "<word>");
-    opts.optopt(
-        "p",
-        "port",
-        "Listen on <port> for query via http.",
-        "<port>",
-    );
-    opts.optflag("h", "help", "Show this message.");
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => panic!("{}", f.to_string()),
-    };
-    if matches.opt_present("h") {
-        print_usage(&program, opts);
+    // プログラム名を取得
+    let program = env::args().next().unwrap_or_else(|| "rustmigemo".to_string());
+    
+    // pico-argsを使って引数を解析
+    let mut args = Arguments::from_env();
+
+    // ヘルプオプションが指定されている場合は、使い方を表示して終了
+    if args.contains(["-h", "--help"]) {
+        print_usage(&program);
         return;
     }
-    let dictfile = matches
-        .opt_str("d")
-        .unwrap_or("migemo-compact-dict".to_string());
-    let quiet = matches.opt_present("q");
-    let word = matches.opt_str("w");
 
-    let v = matches.opt_present("v");
-    let e = matches.opt_present("e");
-    let n = matches.opt_present("n");
+    // 各オプションを解析
+    // エラーが発生した場合は、メッセージを表示して終了
+    let dictfile = args.opt_value_from_str(["-d", "--dict"])
+        .unwrap_or(None)
+        .unwrap_or_else(|| "migemo-compact-dict".to_string());
+    
+    let quiet = args.contains(["-q", "--quiet"]);
+    let word: Option<String> = args.opt_value_from_str(["-w", "--word"]).unwrap_or(None);
+    let port: Option<usize> = args.opt_value_from_str(["-p", "--port"]).unwrap_or(None);
+
+    let v = args.contains(["-v", "--vim"]);
+    let e = args.contains(["-e", "--emacs"]);
+    let n = args.contains(["-n", "--nonewline"]);
+
+    // 残りの引数があれば警告
+    let remaining = args.finish();
+    if !remaining.is_empty() {
+        eprintln!("Warning: Unused arguments: {:?}", remaining);
+    }
+
+    // 正規表現のオペレータを設定
     let rxop = match (v, e, n) {
         (true, false, false) => RegexOperator::Vim,
         (true, false, true) => RegexOperator::VimNonNewline,
@@ -65,22 +69,27 @@ fn main() {
         (false, true, true) => RegexOperator::EmacsNonNewline,
         (_, _, _) => RegexOperator::Default,
     };
-    let mut f = File::open(dictfile).expect("Fail to load dict file");
+
+    // 辞書ファイルを読み込み
+    let mut f = File::open(&dictfile).expect("Fail to load dict file");
     let mut buf = Vec::new();
     let _ = f.read_to_end(&mut buf);
-    let p = matches.opt_str("p");
     drop(f);
     let dict = CompactDictionary::new(&buf);
-    if word.is_some() {
-        let result = query(word.unwrap(), &dict, &rxop);
+
+    // --word オプションが指定されている場合
+    if let Some(w) = word {
+        let result = query(w, &dict, &rxop);
         println!("{}", result);
-    } else if p.is_some() {
-        let port = p.unwrap().parse::<usize>().expect("Invalid port number");
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).unwrap();
+    // --port オプションが指定されている場合
+    } else if let Some(p) = port {
+        let listener = TcpListener::bind(format!("127.0.0.1:{}", p)).unwrap();
+        println!("Listening on port {}...", p);
         for stream in listener.incoming() {
             let stream = stream.unwrap();
             handle_connection(stream, &dict, &rxop);
         }
+    // オプションがない場合は対話モード
     } else {
         loop {
             let mut line = String::new();
