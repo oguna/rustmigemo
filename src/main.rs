@@ -128,7 +128,16 @@ fn handle_connection(mut stream: TcpStream, dict: &CompactDictionary, rxop: &Reg
     let response = match (method, path) {
         (Some("GET"), Some(path_)) => {
             let decoded = percent_decode(path_.as_bytes());
-            format!("HTTP/1.1 200 OK\r\n\r\n{}", query(decoded[1..].to_string(), dict, rxop))
+            let body = query(decoded[1..].to_string(), dict, rxop);
+            format!(
+                "HTTP/1.1 200 OK\r\n\
+                Content-Type: text/plain; charset=utf-8\r\n\
+                Content-Length: {}\r\n\
+                \r\n\
+                {}",
+                body.len(),
+                body
+            )
         },
         _ => {
             "HTTP/1.1 404 NOT FOUND\r\n\r\n".to_string()
