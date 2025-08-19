@@ -38,8 +38,8 @@ jobs:
       # crossコマンドがターゲットに合ったDockerイメージを自動で利用する
       - name: Build for all targets
         run: |
-          cross build --release --target x86_64-unknown-linux-gnu
-          cross build --release --target x86_64-pc-windows-gnu
+          cross build --release --features cli --target x86_64-unknown-linux-gnu
+          cross build --release --features cli --target x86_64-pc-windows-gnu
 
       # ステップ6: リリース用のアセットを準備する
       # 各ターゲットの実行ファイルを個別にzipアーカイブする
