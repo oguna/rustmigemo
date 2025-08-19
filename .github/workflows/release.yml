@@ -50,16 +50,21 @@ jobs:
           
           PROJECT_NAME=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].name')
           
+          # cargo metadataからパッケージ名とバイナリ（実行ファイル）名を取得
+          METADATA=$(cargo metadata --no-deps --format-version 1)
+          PACKAGE_NAME=$(echo "${METADATA}" | jq -r '.packages[0].name')
+          EXECUTABLE_NAME=$(echo "${METADATA}" | jq -r '.packages[0].targets[] | select(.kind[] | contains("bin")) | .name' | head -n 1)
+
           # Linux用アセットの準備
           LINUX_TARGET="x86_64-unknown-linux-gnu"
-          LINUX_EXECUTABLE_PATH="target/${LINUX_TARGET}/release/${PROJECT_NAME}"
-          LINUX_ARCHIVE_NAME="${PROJECT_NAME}-${{ github.ref_name }}-linux-x64.zip"
+          LINUX_EXECUTABLE_PATH="target/${LINUX_TARGET}/release/${EXECUTABLE_NAME}"
+          LINUX_ARCHIVE_NAME="${PACKAGE_NAME}-${TAG_NAME}-linux-x64.zip"
           zip "${LINUX_ARCHIVE_NAME}" "${LINUX_EXECUTABLE_PATH}"
           
           # Windows用アセットの準備 (GNUターゲット)
           WINDOWS_TARGET="x86_64-pc-windows-gnu"
-          WINDOWS_EXECUTABLE_PATH="target/${WINDOWS_TARGET}/release/${PROJECT_NAME}.exe"
-          WINDOWS_ARCHIVE_NAME="${PROJECT_NAME}-${{ github.ref_name }}-windows-x64.zip"
+          WINDOWS_EXECUTABLE_PATH="target/${WINDOWS_TARGET}/release/${EXECUTABLE_NAME}.exe"
+          WINDOWS_ARCHIVE_NAME="${PACKAGE_NAME}-${TAG_NAME}-windows-x64.zip"
           zip "${WINDOWS_ARCHIVE_NAME}" "${WINDOWS_EXECUTABLE_PATH}"
           
           # 後続のステップで使えるようにアーカイブ名を環境変数に設定
