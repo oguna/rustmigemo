@@ -25,28 +25,23 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # ステップ3: Windowsターゲットをインストール
-      # crossがフォールバックした際にホスト上でビルドするために必要
-      - name: Install windows target
-        run: rustup target add x86_64-pc-windows-msvc
-
-      # ステップ4: Cargoのビルドキャッシュを設定する
+      # ステップ3: Cargoのビルドキャッシュを設定する
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
 
-      # ステップ5: クロスコンパイルツール 'cross' をインストール
+      # ステップ4: クロスコンパイルツール 'cross' をインストール
       # crates.io から特定のバージョンをインストールする
       - name: Install cross
         run: cargo install cross --version 0.2.5
 
-      # ステップ6: Linux と Windows 向けにビルド
+      # ステップ5: Linux と Windows 向けにビルド
       # crossコマンドがターゲットに合ったDockerイメージを自動で利用する
       - name: Build for all targets
         run: |
           cross build --release --target x86_64-unknown-linux-gnu
-          cross build --release --target x86_64-pc-windows-msvc
+          cross build --release --target x86_64-pc-windows-gnu
 
-      # ステップ7: リリース用のアセットを準備する
+      # ステップ6: リリース用のアセットを準備する
       # 各ターゲットの実行ファイルを個別にzipアーカイブする
       - name: Prepare release assets
         shell: bash
@@ -61,8 +56,8 @@ jobs:
           LINUX_ARCHIVE_NAME="${PROJECT_NAME}-${{ github.ref_name }}-linux-x64.zip"
           zip "${LINUX_ARCHIVE_NAME}" "${LINUX_EXECUTABLE_PATH}"
           
-          # Windows用アセットの準備
-          WINDOWS_TARGET="x86_64-pc-windows-msvc"
+          # Windows用アセットの準備 (GNUターゲット)
+          WINDOWS_TARGET="x86_64-pc-windows-gnu"
           WINDOWS_EXECUTABLE_PATH="target/${WINDOWS_TARGET}/release/${PROJECT_NAME}.exe"
           WINDOWS_ARCHIVE_NAME="${PROJECT_NAME}-${{ github.ref_name }}-windows-x64.zip"
           zip "${WINDOWS_ARCHIVE_NAME}" "${WINDOWS_EXECUTABLE_PATH}"
@@ -71,7 +66,7 @@ jobs:
           echo "LINUX_ARCHIVE=${LINUX_ARCHIVE_NAME}" >> $GITHUB_ENV
           echo "WINDOWS_ARCHIVE=${WINDOWS_ARCHIVE_NAME}" >> $GITHUB_ENV
 
-      # ステップ8: GitHub Releaseを作成し、zipファイルをアップロードする
+      # ステップ7: GitHub Releaseを作成し、zipファイルをアップロードする
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
