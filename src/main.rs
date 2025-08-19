@@ -127,8 +127,9 @@ fn handle_connection(mut stream: TcpStream, dict: &CompactDictionary, rxop: &Reg
 
     let response = match (method, path) {
         (Some("GET"), Some(path_)) => {
-            let decoded = percent_decode(path_.as_bytes());
-            let body = query(decoded[1..].to_string(), dict, rxop);
+            let query_str = path_.strip_prefix('/').unwrap_or(path_);
+            let decoded = percent_decode(query_str);
+            let body = query(query_str, dict, rxop);
             format!(
                 "HTTP/1.1 200 OK\r\n\
                 Content-Type: text/plain; charset=utf-8\r\n\
