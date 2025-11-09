@@ -4,6 +4,7 @@ pub mod compact_dictionary;
 pub mod louds_trie;
 pub mod regex_generator;
 pub mod romaji_processor;
+pub mod compact_romaji_processor;
 pub mod query;
 pub mod bit_list;
 pub mod ternary_regex_generator;

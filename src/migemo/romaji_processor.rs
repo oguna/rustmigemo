@@ -602,7 +602,7 @@ mod tests {
         assert_eq!(actual, expected);
     }
 
-    fn romaji_to_hiragana_predictively(romaji: &str) -> (String, Vec<String>) {
+        fn romaji_to_hiragana_predictively(romaji: &str) -> (String, Vec<String>) {
         let processor = RomanProcessor::new();
         let kensaku: Vec<u16> = romaji.encode_utf16().collect();
         let actual = processor.romaji_to_hiragana_predictively(&kensaku);
