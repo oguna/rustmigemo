@@ -133,29 +133,13 @@ impl LoudsTrie {
         let child_start_bit = self.bit_vector.select(first_child as usize, true);
         let child_end_bit = self.bit_vector.next_clear_bit(child_start_bit);
         let child_size = child_end_bit - child_start_bit;
-        let result = LoudsTrie::binary_search_uint16(&self.edges, first_child as usize, (first_child as usize) + child_size, c);
-        return match result {
-            Ok(x) => Some(x),
-            Err(_) => None
+        let from = first_child as usize;
+        let to = from + child_size;
+        if let Ok(idx) = self.edges[from..to].binary_search(&c) {
+            Some(from + idx)
+        } else {
+            None
         }
-    }
-
-    fn binary_search_uint16(a: &Vec<u16>, from: usize, to: usize, key: u16) -> Result<usize, usize> {
-        // TODO: slice has binary_search, so we should use it, alternative to this implementation.
-        let mut low = from;
-        let mut high = to - 1;
-        while low <= high {
-            let mid = (low + high) >> 1;
-            let mid_val = a[mid];
-            if mid_val < key {
-                low = mid + 1;
-            } else if mid_val > key {
-                high = mid - 1;
-            } else {
-                return Ok(mid);
-            }
-        }
-        return Err(low + 1);
     }
 
     pub fn get(&self, key: &[u16]) -> Option<usize> {
