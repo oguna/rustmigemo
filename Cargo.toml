@@ -2,7 +2,7 @@
 name = "rustmigemo"
 version = "0.1.4"
 authors = ["oguna <5452619+oguna@users.noreply.github.com>"]
-edition = "2018"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -23,7 +23,7 @@ windows-dll = []
 [dependencies]
 byteorder = "1.5.0"
 pico-args = { version = "0.5", optional = true }
-wasm-bindgen = { version = "0.2.105", optional = true }
+wasm-bindgen = { version = "0.2.106", optional = true }
 
 [dev-dependencies]
 rand = "0.9.2"

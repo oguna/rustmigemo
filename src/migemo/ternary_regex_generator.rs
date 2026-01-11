@@ -92,7 +92,7 @@ fn traverse_siblings<'a>(node: &'a Option<Box<TernaryRegexNode>>, buffer: &mut V
     match node {
         None => {
         },
-        Some(ref n) => {
+        Some(n) => {
             traverse_siblings(&n.left, buffer);
             buffer.push(n);
             traverse_siblings(&n.right, buffer);

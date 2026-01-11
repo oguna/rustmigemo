@@ -91,7 +91,7 @@ impl BitVector {
 
     unsafe fn select_in_word_pdep(word: u64, count: usize) -> usize {
         let k_th_bit = 1_u64 << (count - 1);
-        let isolated_bit = _pdep_u64(k_th_bit, word);
+        let isolated_bit = unsafe { _pdep_u64(k_th_bit, word) };
         isolated_bit.trailing_zeros() as usize
     }
 
