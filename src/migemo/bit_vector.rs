@@ -5,6 +5,26 @@ type SelectFn = unsafe fn(u64, usize) -> usize;
 
 static SELECT_FN: OnceLock<SelectFn> = OnceLock::new();
 
+const SELECT8: [[u8; 8]; 256] = build_select8();
+
+const fn build_select8() -> [[u8; 8]; 256] {
+    let mut table = [[0xFFu8; 8]; 256];
+    let mut byte = 0usize;
+    while byte < 256 {
+        let mut count = 0usize;
+        let mut bit = 0usize;
+        while bit < 8 {
+            if ((byte as u8 >> bit) & 1) == 1 {
+                table[byte][count] = bit as u8;
+                count += 1;
+            }
+            bit += 1;
+        }
+        byte += 1;
+    }
+    table
+}
+
 #[derive(Debug)]
 pub struct BitVector {
     words: Vec<u64>,
@@ -95,48 +115,42 @@ impl BitVector {
         isolated_bit.trailing_zeros() as usize
     }
 
-    fn select_in_word(mut word: u64, mut count: usize) -> usize {
-        // 1. countは1以上でなければならない
+    fn select_in_word(word: u64, count: usize) -> usize {
+        // count is 1-indexed.
         assert!(count > 0, "count must be greater than 0 for select_in_word");
 
-        // 2. word内の1の数がcount以上でなければならない
+        // Ensure the word has enough set bits.
         assert!(
             word.count_ones() as usize >= count,
             "word (popcount: {}) has fewer than the required {} bits",
             word.count_ones(),
             count
         );
-        let lower_bit_count = u32::count_ones(word as u32) as usize;
-        let mut i = 0;
-        if lower_bit_count < count {
-            word = word >> 32;
-            count = count - lower_bit_count;
-            i = 32;
-        }
-        let lower16bit_count = u16::count_ones(word as u16) as usize;
-        if lower16bit_count < count {
-            word = word >> 16;
-            count = count - lower16bit_count;
-            i = i + 16;
-        }
-        let lower8bit_count = u8::count_ones(word as u8) as usize;
-        if lower8bit_count < count {
-            word = word >> 8;
-            count = count - lower8bit_count;
-            i = i + 8;
-        }
-        let lower4bit_count = u8::count_ones((word & 0b1111) as u8) as usize;
-        if lower4bit_count < count {
-            word = word >> 4;
-            count = count - lower4bit_count;
-            i = i + 4;
-        }
-        while count > 0 {
-            count = count - (word & 1) as usize;
-            word = word >> 1;
-            i = i + 1;
-        }
-        return i - 1;
+
+        let k0 = (count - 1) as u64;
+        let mut b = word;
+        b = b - ((b >> 1) & 0x5555555555555555);
+        b = (b & 0x3333333333333333) + ((b >> 2) & 0x3333333333333333);
+        b = (b + (b >> 4)) & 0x0F0F0F0F0F0F0F0F;
+
+        let mut ps = b;
+        ps += ps << 8;
+        ps += ps << 16;
+        ps += ps << 32;
+
+        let k_rep = k0 * 0x0101010101010101;
+        let high = 0x8080808080808080u64;
+        // Each byte in ps is 0..64 and k0 is 0..63, so the subtract is borrow-free per byte.
+        let le_mask = ((k_rep | high).wrapping_sub(ps)) & high;
+        let gt_mask = (!le_mask) & high;
+        let byte_idx = (gt_mask.trailing_zeros() >> 3) as u32;
+
+        let prev_ps = ps << 8;
+        let prev = ((prev_ps >> (byte_idx * 8)) & 0xFF) as u32;
+        let k_in = (k0 as u32) - prev;
+        let byte = ((word >> (byte_idx * 8)) & 0xFF) as u8;
+        let pos_in_byte = SELECT8[byte as usize][k_in as usize];
+        (byte_idx as usize) * 8 + (pos_in_byte as usize)
     }
 
     fn lower_bound_binary_search_lb(&self, key: u32, b: bool) -> usize {
@@ -242,6 +256,19 @@ mod tests {
         return words;
     }
 
+    fn select_in_word_ref(word: u64, count: usize) -> usize {
+        let mut remaining = count;
+        for i in 0..64 {
+            if ((word >> i) & 1) != 0 {
+                remaining -= 1;
+                if remaining == 0 {
+                    return i;
+                }
+            }
+        }
+        panic!("select_in_word_ref called with count larger than popcount");
+    }
+
     #[test]
     fn test_rank() {
         fn rank(bits: &Vec<bool>, pos: usize, b: bool) -> usize {
@@ -305,6 +332,61 @@ mod tests {
     }
 
     #[test]
+    fn test_select_in_word_edge_cases() {
+        let cases = [
+            0u64,
+            !0u64,
+            1u64,
+            1u64 << 63,
+            0xAAAAAAAAAAAAAAAA,
+            0x5555555555555555,
+            0x00000000FFFFFFFF,
+            0xFFFFFFFF00000000,
+            0x0000FFFF00000000,
+            0x000000000000FFFF,
+            0xFFFF000000000000,
+        ];
+
+        for &word in &cases {
+            let pop = word.count_ones() as usize;
+            if pop == 0 {
+                continue;
+            }
+            for count in 1..=pop {
+                assert_eq!(select_in_word_ref(word, count), BitVector::select_in_word(word, count));
+            }
+        }
+    }
+
+    #[test]
+    fn test_select_in_word_random() {
+        let mut rng = rand::rng();
+        for _ in 0..2000 {
+            let word: u64 = rng.random();
+            let pop = word.count_ones() as usize;
+            for count in 1..=pop {
+                assert_eq!(select_in_word_ref(word, count), BitVector::select_in_word(word, count));
+            }
+        }
+    }
+
+    #[test]
+    fn test_select_in_word_pdep_matches_when_available() {
+        if !is_x86_feature_detected!("bmi2") {
+            return;
+        }
+        let mut rng = rand::rng();
+        for _ in 0..1000 {
+            let word: u64 = rng.random();
+            let pop = word.count_ones() as usize;
+            for count in 1..=pop {
+                let pdep_pos = unsafe { BitVector::select_in_word_pdep(word, count) };
+                assert_eq!(pdep_pos, BitVector::select_in_word(word, count));
+            }
+        }
+    }
+
+    #[test]
     fn test_next_clear_bit() {
         fn next_clear_bit(bits: &Vec<bool>, pos: usize) -> usize {
             let mut pos = pos;
@@ -330,3 +412,4 @@ mod tests {
         }
     }
 }
+
