@@ -44,6 +44,43 @@ impl<'a> Iterator for LoudsTriePredictiveSearchIter<'a> {
 }
 
 #[derive(Debug)]
+pub struct LoudsTrieCommonPrefixSearchIter<'a, 'b> {
+    trie: &'a LoudsTrie,
+    key: &'b [u16],
+    node_index: usize,
+    position: usize,
+    finished: bool,
+}
+
+impl<'a, 'b> Iterator for LoudsTrieCommonPrefixSearchIter<'a, 'b> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.finished {
+            return None;
+        }
+        if self.position >= self.key.len() {
+            self.finished = true;
+            return None;
+        }
+        match self
+            .trie
+            .traverse(self.node_index as u32, self.key[self.position])
+        {
+            Some(next_node) => {
+                self.node_index = next_node;
+                self.position += 1;
+                Some(self.node_index)
+            }
+            None => {
+                self.finished = true;
+                None
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct LoudsTrie {
     pub bit_vector: BitVector,
     pub edges: Vec<u16>,
@@ -96,29 +133,13 @@ impl LoudsTrie {
         let child_start_bit = self.bit_vector.select(first_child as usize, true);
         let child_end_bit = self.bit_vector.next_clear_bit(child_start_bit);
         let child_size = child_end_bit - child_start_bit;
-        let result = LoudsTrie::binary_search_uint16(&self.edges, first_child as usize, (first_child as usize) + child_size, c);
-        return match result {
-            Ok(x) => Some(x),
-            Err(_) => None
+        let from = first_child as usize;
+        let to = from + child_size;
+        if let Ok(idx) = self.edges[from..to].binary_search(&c) {
+            Some(from + idx)
+        } else {
+            None
         }
-    }
-
-    fn binary_search_uint16(a: &Vec<u16>, from: usize, to: usize, key: u16) -> Result<usize, usize> {
-        // TODO: slice has binary_search, so we should use it, alternative to this implementation.
-        let mut low = from;
-        let mut high = to - 1;
-        while low <= high {
-            let mid = (low + high) >> 1;
-            let mid_val = a[mid];
-            if mid_val < key {
-                low = mid + 1;
-            } else if mid_val > key {
-                high = mid - 1;
-            } else {
-                return Ok(mid);
-            }
-        }
-        return Err(low + 1);
     }
 
     pub fn get(&self, key: &[u16]) -> Option<usize> {
@@ -143,6 +164,19 @@ impl LoudsTrie {
             lower: lower,
             cursor: lower,
         };
+    }
+
+    pub fn common_prefix_search<'a, 'b>(
+        &'a self,
+        key: &'b [u16],
+    ) -> LoudsTrieCommonPrefixSearchIter<'a, 'b> {
+        LoudsTrieCommonPrefixSearchIter {
+            trie: self,
+            key,
+            node_index: 1,
+            position: 0,
+            finished: false,
+        }
     }
 
     pub fn size(&self) -> usize {
@@ -191,19 +225,24 @@ impl LoudsTrie {
             memo[i] = -memo[i];
         }
 
+        // Ensure child_sizes is large enough for current_node
+        if child_sizes.len() <= current_node {
+            child_sizes.resize(current_node + 1, 0);
+        }
+
         let num_of_children = child_sizes[1..=current_node].iter().sum::<u32>();
 
         let num_of_nodes = current_node;
         let mut bit_vector_words =
-            vec![0; ((num_of_children + num_of_nodes as u32 + 63 + 1) / 64) as usize];
+            vec![0u64; ((num_of_children + num_of_nodes as u32 + 63 + 1) / 64) as usize];
         let mut bit_vector_index = 1;
         bit_vector_words[0] = 1;
         for i in 1..=current_node {
             bit_vector_index = bit_vector_index + 1;
             let child_size = child_sizes[i];
             for _ in 0..child_size {
-                bit_vector_words[bit_vector_index >> 5] =
-                    bit_vector_words[bit_vector_index >> 5] | (1 << (bit_vector_index & 31));
+                bit_vector_words[bit_vector_index >> 6] =
+                    bit_vector_words[bit_vector_index >> 6] | (1u64 << (bit_vector_index & 63));
                 bit_vector_index = bit_vector_index + 1;
             }
         }
@@ -232,5 +271,34 @@ mod tests {
         assert_eq!(trie.bit_vector.words(), vec![1145789805]);
         assert_eq!(trie.bit_vector.size(), 32);
         assert_eq!(trie.edges, vec![32, 32, 98, 100, 97, 111, 97, 98, 100, 110, 120, 100, 110, 121,107, 99, 101]);
+    }
+
+    #[test]
+    fn test_common_prefix_search() {
+        let words: Vec<Vec<u16>> = vec!["a", "ab", "abc", "abcd"].iter().map(|x| x.encode_utf16().collect()).collect();
+        let (trie, _) = LoudsTrie::build(&words);
+        
+        let query: Vec<u16> = "abcd".encode_utf16().collect();
+        let result: Vec<_> = trie.common_prefix_search(&query).collect();
+        
+        // Should find all prefixes: "a", "ab", "abc", "abcd"
+        assert_eq!(result.len(), 4);
+        
+        // Verify each result is a valid node
+        for node_index in result {
+            assert!(node_index > 0 && node_index < trie.edges.len());
+        }
+    }
+
+    #[test]
+    fn test_common_prefix_search_partial() {
+        let words: Vec<Vec<u16>> = vec!["baby", "bad", "bank"].iter().map(|x| x.encode_utf16().collect()).collect();
+        let (trie, _) = LoudsTrie::build(&words);
+        
+        let query: Vec<u16> = "ba".encode_utf16().collect();
+        let result: Vec<_> = trie.common_prefix_search(&query).collect();
+        
+        // Should find "b" and "ba" positions in the trie
+        assert_eq!(result.len(), 2);
     }
 }

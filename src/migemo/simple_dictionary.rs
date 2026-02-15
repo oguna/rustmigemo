@@ -31,7 +31,7 @@ impl SimpleDictionary {
         };
     }
 
-pub fn predictive_search(&self, hiragana: &Vec<u16>) -> Vec<Vec<u16>> {
+    pub fn predictive_search(&self, hiragana: &Vec<u16>) -> Vec<Vec<u16>> {
         if hiragana.len() > 0 {
             let mut stop = hiragana.clone();
             let stop_char = stop[&stop.len()-1]+1;

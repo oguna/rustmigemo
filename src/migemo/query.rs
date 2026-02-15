@@ -2,7 +2,7 @@ use super::character_converter::*;
 use super::compact_dictionary::*;
 use super::regex_generator::*;
 use super::ternary_regex_generator::*;
-use super::romaji_processor::*;
+use super::romaji_processor::RomajiProcessor;
 use std::iter::Peekable;
 use std::str::CharIndices;
 use std::char::{decode_utf16, REPLACEMENT_CHARACTER};
@@ -36,7 +36,7 @@ pub fn query_a_word_with_generator<T: RegexGeneratorTrait>(
     let han_chars: Vec<char> = han_str.chars().collect();
     generator.add(&han_chars);
 
-    let processor = RomanProcessor::new();
+    let processor = RomajiProcessor::new();
     let hiragana = processor.romaji_to_hiragana_predictively(&lower);
     for suffix in hiragana.suffixes {
         let mut hira = hiragana.prefix.clone();
