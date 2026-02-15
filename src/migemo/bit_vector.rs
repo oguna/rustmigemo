@@ -387,6 +387,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn test_select_in_word_pdep_matches_when_available() {
         if !is_x86_feature_detected!("bmi2") {
             return;
