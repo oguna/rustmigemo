@@ -1,78 +1,53 @@
-# ワークフローの名前
 name: Release
 
-# ワークフローが実行されるトリガーを指定
+permissions:
+  contents: write
+
 on:
   push:
-    # 'v'で始まるタグ（例: v1.0, v1.2.3）がプッシュされた時のみ実行
     tags:
       - 'v*'
 
-# 実行される一連のジョブを定義
+env:
+  BIN_NAME: rustmigemo
+  TARGET: x86_64-pc-windows-msvc
+
 jobs:
-  # 'build-and-release' という名前の単一ジョブを定義
   build-and-release:
-    # すべてのビルドを単一のUbuntuランナーで実行
-    runs-on: ubuntu-latest
+    name: Build for Windows
+    runs-on: windows-latest
 
-    # ジョブ内の一連のステップを定義
     steps:
-      # ステップ1: リポジトリのコードをチェックアウトする
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      # ステップ2: Rustのツールチェーンをセットアップする
-      - name: Setup Rust toolchain
+      - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.TARGET }}
 
-      # ステップ3: Cargoのビルドキャッシュを設定する
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
+      - name: Build binary
+        run: cargo build --release --features cli --target ${{ env.TARGET }}
 
-      # ステップ4: クロスコンパイルツール 'cross' をインストール
-      # crates.io から特定のバージョンをインストールする
-      - name: Install cross
-        run: cargo install cross --version 0.2.5
-
-      # ステップ5: Linux と Windows 向けにビルド
-      # crossコマンドがターゲットに合ったDockerイメージを自動で利用する
-      - name: Build for all targets
-        run: |
-          cross build --release --features cli --target x86_64-unknown-linux-gnu
-          cross build --release --features cli --target x86_64-pc-windows-gnu
-
-      # ステップ6: リリース用のアセットを準備する
-      # 各ターゲットの実行ファイルを個別にzipアーカイブする
-      - name: Prepare release assets
+      - name: Create archive directory
         shell: bash
         run: |
-          set -e # エラーが発生したら即座にスクリプトを終了する
+          mkdir -p staging
+          # Windows用バイナリ(.exe)をコピー
+          cp "target/${{ env.TARGET }}/release/${{ env.BIN_NAME }}-cli.exe" "staging/${{ env.BIN_NAME }}.exe"
           
-          # バイナリ（実行ファイル）名を設定
-          EXECUTABLE_NAME="rustmigemo-cli"
-          PACKAGE_NAME="rustmigemo-cli"
+          # ライセンスファイルのコピー (存在確認をしてからコピー)
+          if [ -f "LICENSE" ]; then cp LICENSE staging/; fi
+          if [ -f "THIRDPARTY_LICENSE.txt" ]; then cp THIRDPARTY_LICENSE.txt staging/; fi
 
-          # Linux用アセットの準備
-          LINUX_TARGET="x86_64-unknown-linux-gnu"
-          LINUX_EXECUTABLE_PATH="target/${LINUX_TARGET}/release/${EXECUTABLE_NAME}"
-          LINUX_ARCHIVE_NAME="${PACKAGE_NAME}-linux-x64.zip"
-          zip "${LINUX_ARCHIVE_NAME}" "${LINUX_EXECUTABLE_PATH}"
-          
-          # Windows用アセットの準備 (GNUターゲット)
-          WINDOWS_TARGET="x86_64-pc-windows-gnu"
-          WINDOWS_EXECUTABLE_PATH="target/${WINDOWS_TARGET}/release/${EXECUTABLE_NAME}.exe"
-          WINDOWS_ARCHIVE_NAME="${PACKAGE_NAME}-windows-x64.zip"
-          zip "${WINDOWS_ARCHIVE_NAME}" "${WINDOWS_EXECUTABLE_PATH}"
-          
-          # 後続のステップで使えるようにアーカイブ名を環境変数に設定
-          echo "LINUX_ARCHIVE=${LINUX_ARCHIVE_NAME}" >> $GITHUB_ENV
-          echo "WINDOWS_ARCHIVE=${WINDOWS_ARCHIVE_NAME}" >> $GITHUB_ENV
+      - name: Pack archive
+        run: |
+          Compress-Archive -Path staging/* -DestinationPath "${{ env.BIN_NAME }}-${{ env.TARGET }}.zip"
 
-      # ステップ7: GitHub Releaseを作成し、zipファイルをアップロードする
-      - name: Create GitHub Release
+      - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          # 前のステップで作成した両方のzipファイルをアップロード
-          files: |
-            ${{ env.LINUX_ARCHIVE }}
-            ${{ env.WINDOWS_ARCHIVE }}
+          files: ${{ env.BIN_NAME }}-${{ env.TARGET }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
