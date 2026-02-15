@@ -8,14 +8,18 @@ fn encode_char(c: char) -> Option<u16> {
     if c == '\u{00}' {
         return Some(0);
     }
+    // ASCIIの範囲 (0x20 ~ 0x7E)
     if '\u{20}' <= c && c <= '\u{7e}' {
         return Some(c as u16);
     }
+    // ひらがなの範囲 (0x3041 'ぁ' ~ 0x3096 'ゖ')
+    // 0xA1 ~ 0xF6 にマッピングされる
     if '\u{3041}' <= c && c <= '\u{3096}' {
         return Some((c as u16) - 0x3040 + 0xa0);
     }
+    // 長音符 'ー' (空いている 0xF7 に割り当てる)
     if '\u{30fc}' == c {
-        return Some((c as u16) - 0x3040 + 0xa0);
+        return Some(0xf7);
     }
     return None;
 }

@@ -153,15 +153,23 @@ impl CompactDictionary {
         return bit_list;
     }
 
-    fn decode(c: u8) -> u16 {
-        if 0x20 <= c && c <= 0x7e {
-            return c as u16;
+    fn decode(b: u8) -> u16 {
+    match b {
+        // NULL文字
+        0x00 => 0,
+        // ASCIIの範囲 (0x20 ~ 0x7E)
+        0x20..=0x7E => b as u16,
+        // ひらがなの範囲 (0xA1 ~ 0xF6)
+        0xA1..=0xF6 => {
+            let code_point = (b as u32) - 0xA0 + 0x3040;
+            code_point as u16
         }
-        if 0xa1 <= c && c <= 0xf6 {
-            return (c as u16) + 0x3040 - 0xa0;
-        }   
-        return 0;
+        // 長音符 'ー'
+        0xF7 => 0x30fc,
+        // 未定義のバイト列が来た場合は 0 を返す
+        _ => 0,
     }
+}
 
     pub fn search(&self, key: &Vec<u16>) -> SearchIter<'_> {
         let key_index = self.key_trie.get(key);
