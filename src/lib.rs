@@ -50,7 +50,7 @@ mod windows_exports {
         result_len: u32,
     }
 
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub unsafe extern "C" fn load(buffer: *const u8, len: u32) -> Migemo {
         let mut dst = Vec::with_capacity(len as usize);
         dst.set_len(len as usize);
@@ -63,7 +63,7 @@ mod windows_exports {
         };
     }
 
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub unsafe extern "C" fn query(migemo: *mut Migemo, buffer: *const u8, len: u32) -> bool {
         if !(*migemo).result_ptr.is_null() {
             let _ = CString::from_raw((*migemo).result_ptr);
@@ -88,7 +88,7 @@ mod windows_exports {
         return true;
     }
 
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub unsafe extern "C" fn destroy(migemo: *mut Migemo) {
         if !(*migemo).result_ptr.is_null() {
             let _ = CString::from_raw((*migemo).result_ptr);
