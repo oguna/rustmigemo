@@ -100,33 +100,22 @@ impl BitVector {
 
     #[inline]
     fn select_in_word(word: u64, count: usize) -> usize {
-        use std::sync::OnceLock;
-        type SelectFn = fn(u64, usize) -> usize;
-        static SELECT_FN: OnceLock<SelectFn> = OnceLock::new();
-
-        let func = SELECT_FN.get_or_init(|| {
-            #[cfg(target_arch = "x86_64")]
-            {
-                if is_x86_feature_detected!("bmi2") {
-                    return Self::select_in_word_bmi2_dispatch
-                }
+        #[cfg(target_arch = "x86_64")]
+        {
+            if is_x86_feature_detected!("bmi2") {
+                return unsafe { Self::select_in_word_pdep(word, count) };
             }
-            Self::select_in_word_fallback
-        });
-        func(word, count)
+        }
+
+        Self::select_in_word_fallback(word, count)
     }
 
     #[cfg(target_arch = "x86_64")]
-    #[inline]
-    fn select_in_word_bmi2_dispatch(word: u64, count: usize) -> usize {
-        unsafe { Self::select_in_word_pdep(word, count) }
-    }
-
-    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "bmi2")]
     #[inline]
     unsafe fn select_in_word_pdep(word: u64, count: usize) -> usize {
         let k_th_bit = 1_u64 << (count - 1);
-        let isolated_bit = unsafe { _pdep_u64(k_th_bit, word) };
+        let isolated_bit = _pdep_u64(k_th_bit, word);
         isolated_bit.trailing_zeros() as usize
     }
 
