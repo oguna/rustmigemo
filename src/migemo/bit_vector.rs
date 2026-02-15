@@ -95,38 +95,43 @@ impl BitVector {
         if !b {
             word = !word;
         }
-        sb_index * 64 + Self::select_in_word_optimized(word, count_in_sb)
+        sb_index * 64 + Self::select_in_word(word, count_in_sb)
     }
 
-    #[cfg(target_arch = "x86_64")]
-    fn select_in_word_optimized(word: u64, count: usize) -> usize {
+    #[inline]
+    fn select_in_word(word: u64, count: usize) -> usize {
         use std::sync::OnceLock;
         type SelectFn = fn(u64, usize) -> usize;
         static SELECT_FN: OnceLock<SelectFn> = OnceLock::new();
 
         let func = SELECT_FN.get_or_init(|| {
-            if is_x86_feature_detected!("bmi2") {
-                |w, c| unsafe { Self::select_in_word_pdep(w, c) }
-            } else {
-                Self::select_in_word
+            #[cfg(target_arch = "x86_64")]
+            {
+                if is_x86_feature_detected!("bmi2") {
+                    return Self::select_in_word_bmi2_dispatch
+                }
             }
+            Self::select_in_word_fallback
         });
         func(word, count)
     }
 
-    #[cfg(not(target_arch = "x86_64"))]
-    fn select_in_word_optimized(word: u64, count: usize) -> usize {
-        Self::select_in_word(word, count)
+    #[cfg(target_arch = "x86_64")]
+    #[inline]
+    fn select_in_word_bmi2_dispatch(word: u64, count: usize) -> usize {
+        unsafe { Self::select_in_word_pdep(word, count) }
     }
 
     #[cfg(target_arch = "x86_64")]
+    #[inline]
     unsafe fn select_in_word_pdep(word: u64, count: usize) -> usize {
         let k_th_bit = 1_u64 << (count - 1);
         let isolated_bit = unsafe { _pdep_u64(k_th_bit, word) };
         isolated_bit.trailing_zeros() as usize
     }
 
-    fn select_in_word(word: u64, count: usize) -> usize {
+    #[inline]
+    fn select_in_word_fallback(word: u64, count: usize) -> usize {
         // count is 1-indexed.
         assert!(count > 0, "count must be greater than 0 for select_in_word");
 
