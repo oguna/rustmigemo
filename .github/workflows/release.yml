@@ -10,12 +10,27 @@ on:
 
 env:
   BIN_NAME: rustmigemo
-  TARGET: x86_64-pc-windows-msvc
 
 jobs:
   build-and-release:
-    name: Build for Windows
-    runs-on: windows-latest
+    name: Build and Release (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive_ext: zip
+            src_bin_name: rustmigemo-cli.exe
+            dst_bin_name: rustmigemo.exe
+          - name: Linux x64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive_ext: tar.gz
+            src_bin_name: rustmigemo-cli
+            dst_bin_name: rustmigemo
 
     steps:
       - name: Checkout code
@@ -24,30 +39,37 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ env.TARGET }}
+          targets: ${{ matrix.target }}
 
       - name: Build binary
-        run: cargo build --release --features cli --target ${{ env.TARGET }}
+        run: cargo build --release --features cli --target ${{ matrix.target }}
 
       - name: Create archive directory
         shell: bash
         run: |
           mkdir -p staging
-          # Windows用バイナリ(.exe)をコピー
-          cp "target/${{ env.TARGET }}/release/${{ env.BIN_NAME }}-cli.exe" "staging/${{ env.BIN_NAME }}.exe"
-          
-          # ライセンスファイルのコピー (存在確認をしてからコピー)
+          cp "target/${{ matrix.target }}/release/${{ matrix.src_bin_name }}" "staging/${{ matrix.dst_bin_name }}"
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            chmod +x "staging/${{ matrix.dst_bin_name }}"
+          fi
+
           if [ -f "LICENSE" ]; then cp LICENSE staging/; fi
           if [ -f "THIRDPARTY_LICENSES.txt" ]; then cp THIRDPARTY_LICENSES.txt staging/; fi
 
-      - name: Pack archive
+      - name: Pack archive (Windows)
+        if: runner.os == 'Windows'
         run: |
-          Compress-Archive -Path staging/* -DestinationPath "${{ env.BIN_NAME }}-${{ env.TARGET }}.zip"
+          Compress-Archive -Path staging/* -DestinationPath "${{ env.BIN_NAME }}-${{ matrix.target }}.${{ matrix.archive_ext }}"
+
+      - name: Pack archive (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          tar -czf "${{ env.BIN_NAME }}-${{ matrix.target }}.${{ matrix.archive_ext }}" -C staging .
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: ${{ env.BIN_NAME }}-${{ env.TARGET }}.zip
+          files: ${{ env.BIN_NAME }}-${{ matrix.target }}.${{ matrix.archive_ext }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

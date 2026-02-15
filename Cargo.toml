@@ -1,6 +1,6 @@
 [package]
 name = "rustmigemo"
-version = "0.1.4"
+version = "0.1.6"
 authors = ["oguna <5452619+oguna@users.noreply.github.com>"]
 edition = "2024"
 
