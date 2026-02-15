@@ -44,14 +44,13 @@ rustmigemoの利用には、辞書ファイルが必要です。
 Usage: C:\...\rustmigemo-cli.exe [options]
 
 Options:
-    -d, --dict <dict>   Use a file <dict> for dictionary. (default:
-                        migemo-compact-dict)
-    -q, --quiet         Show no message except results.
-    -v, --vim           Use vim style regexp.
-    -e, --emacs         Use emacs style regexp.
-    -n, --nonewline     Don't use newline match.
-    -w, --word <word>   Expand a <word> and soon exit.
-    -h, --help          Show this message.
+  -d, --dict <dict>    Use a file <dict> for dictionary. (default: migemo-compact-dict)
+  -q, --quiet          Show no message except results.
+  -v, --vim            Use vim style regexp.
+  -e, --emacs          Use emacs style regexp.
+  -n, --nonewline      Don't use newline match.
+  -w, --word <word>    Expand a <word> and soon exit.
+  -h, --help           Show this message.
 > .\rustmigemo-cli.exe -w kensaku
 (kensaku|けんさく|ケンサク|建策|憲[作冊]|検索|献策|研削|羂索|ｋｅｎｓａｋｕ|ｹﾝｻｸ)
 ```

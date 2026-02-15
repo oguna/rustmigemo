@@ -2,12 +2,8 @@ extern crate rustmigemo;
 use std::env;
 use std::fs::File;
 use std::io;
-use std::io::prelude::*;
-use std::io::BufReader;
 use std::io::Read;
 use std::io::Write;
-use std::net::TcpListener;
-use std::net::TcpStream;
 
 use rustmigemo::migemo::compact_dictionary::*;
 use rustmigemo::migemo::query::*;
@@ -24,7 +20,6 @@ fn print_usage(program: &str) {
     println!("  -e, --emacs          Use emacs style regexp.");
     println!("  -n, --nonewline      Don't use newline match.");
     println!("  -w, --word <word>    Expand a <word> and soon exit.");
-    println!("  -p, --port <port>    Listen on <port> for query via http.");
     println!("  -h, --help           Show this message.");
 }
 
@@ -49,7 +44,6 @@ fn main() {
     
     let quiet = args.contains(["-q", "--quiet"]);
     let word: Option<String> = args.opt_value_from_str(["-w", "--word"]).unwrap_or(None);
-    let port: Option<usize> = args.opt_value_from_str(["-p", "--port"]).unwrap_or(None);
 
     let v = args.contains(["-v", "--vim"]);
     let e = args.contains(["-e", "--emacs"]);
@@ -81,14 +75,6 @@ fn main() {
     if let Some(w) = word {
         let result = query(w, &dict, &rxop);
         println!("{}", result);
-    // --port オプションが指定されている場合
-    } else if let Some(p) = port {
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", p)).unwrap();
-        println!("Listening on port {}...", p);
-        for stream in listener.incoming() {
-            let stream = stream.unwrap();
-            handle_connection(stream, &dict, &rxop);
-        }
     // オプションがない場合は対話モード
     } else {
         loop {
@@ -110,115 +96,5 @@ fn main() {
                 println!("{}", result);
             }
         }
-    }
-}
-
-fn handle_connection(mut stream: TcpStream, dict: &CompactDictionary, rxop: &RegexOperator) {
-    let mut buf_reader = BufReader::new(stream);
-
-    let mut first_line = String::new();
-    if let Err(err) = buf_reader.read_line(&mut first_line) {
-        panic!("error during receive a line: {}", err);
-    }
-
-    let mut params = first_line.split_whitespace();
-    let method = params.next();
-    let path = params.next();
-
-    let response = match (method, path) {
-        (Some("GET"), Some(path_)) => {
-            let query_str = path_.strip_prefix('/').unwrap_or(path_);
-            match percent_decode(query_str.as_bytes()) {
-                Some(decoded) => {
-                    let body = query(decoded, dict, rxop);
-                    format!(
-                        "HTTP/1.1 200 OK\r\n\
-                        Content-Type: text/plain; charset=utf-8\r\n\
-                        Content-Length: {}\r\n\
-                        \r\n\
-                        {}",
-                        body.len(),
-                        body
-                    )
-                }
-                None => "HTTP/1.1 400 BAD REQUEST\r\n\r\n".to_string(),
-            }
-        },
-        _ => {
-            "HTTP/1.1 404 NOT FOUND\r\n\r\n".to_string()
-        },
-    };
-
-    stream = buf_reader.into_inner();
-    stream.write(response.as_bytes()).unwrap();
-    stream.flush().unwrap()
-}
-
-fn percent_decode(bytes: &[u8]) -> Option<String> {
-    let mut pos = 0;
-    let mut buffer = Vec::with_capacity(bytes.len());
-    let hex_to_decimal = |b| {
-        match b {
-            b'0'..=b'9' => Some(b - b'0'),
-            b'A'..=b'F' => Some(b - b'A' + 10),
-            b'a'..=b'f' => Some(b - b'a' + 10),
-            _ => None,
-        }
-    };
-    while pos < bytes.len() {
-        let byte = bytes[pos];
-        if byte == b'+' {
-            buffer.push(b' ');
-        } else if byte == b'%' {
-            if pos + 2 >= bytes.len() {
-                return None;
-            }
-            let high = hex_to_decimal(bytes[pos + 1])?;
-            let low = hex_to_decimal(bytes[pos + 2])?;
-            let hex = high * 16 + low;
-            pos = pos + 2;
-            buffer.push(hex);
-        } else if byte > 0xf0 {
-            return None;
-        } else {
-            buffer.push(byte);
-        }
-        pos = pos + 1;
-    }
-    Some(String::from_utf8_lossy(&buffer).to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::percent_decode;
-
-    #[test]
-    fn percent_decode_plain() {
-        assert_eq!(percent_decode(b"kensaku"), Some("kensaku".to_string()));
-    }
-
-    #[test]
-    fn percent_decode_encoded() {
-        assert_eq!(percent_decode(b"%41+%42"), Some("A B".to_string()));
-    }
-
-    #[test]
-    fn percent_decode_invalid_hex() {
-        assert_eq!(percent_decode(b"%GG"), None);
-    }
-
-    #[test]
-    fn percent_decode_trailing_percent() {
-        assert_eq!(percent_decode(b"abc%"), None);
-    }
-
-    #[test]
-    fn percent_decode_short_percent() {
-        assert_eq!(percent_decode(b"abc%A"), None);
-    }
-
-    #[test]
-    fn percent_decode_reject_large_byte() {
-        assert_eq!(percent_decode(&[0xf1]), None);
     }
 }
