@@ -38,7 +38,7 @@ jobs:
           
           # ライセンスファイルのコピー (存在確認をしてからコピー)
           if [ -f "LICENSE" ]; then cp LICENSE staging/; fi
-          if [ -f "THIRDPARTY_LICENSE.txt" ]; then cp THIRDPARTY_LICENSE.txt staging/; fi
+          if [ -f "THIRDPARTY_LICENSES.txt" ]; then cp THIRDPARTY_LICENSES.txt staging/; fi
 
       - name: Pack archive
         run: |
