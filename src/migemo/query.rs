@@ -154,6 +154,19 @@ pub fn tokenize(input: &str) -> TokenizeIter<'_> {
 mod tests {
     use super::*;
 
+    fn generate_with_both_generators(words: &[&str], op: &RegexOperator) -> (String, String) {
+        let mut gen1 = RegexGenerator { root: None };
+        let mut gen2 = TernaryRegexGenerator::new();
+
+        for word in words {
+            let chars: Vec<char> = word.chars().collect();
+            gen1.add(&chars);
+            gen2.add(&chars);
+        }
+
+        (gen1.generate(op), gen2.generate(op))
+    }
+
     #[test]
     fn test_tokenize() {
         let query = "toukyouOosaka nagoyaFUKUOKAhokkaido ";
@@ -221,19 +234,29 @@ mod tests {
 
     #[test]
     fn test_generator_compatibility() {
-        // 両方のジェネレータが単純な文字列で同じ結果を生成することを確認
-        let mut gen1 = RegexGenerator { root: None };
-        let mut gen2 = TernaryRegexGenerator::new();
-        let op = RegexOperator::Default;
-        
-        let test_chars: Vec<char> = "test".chars().collect();
-        gen1.add(&test_chars);
-        gen2.add(&test_chars);
-        
-        let result1 = gen1.generate(&op);
-        let result2 = gen2.generate(&op);
-        
-        assert_eq!(result1, result2);
-        assert_eq!(result1, "test");
+        // 改行演算子あり/なしを含め、両ジェネレータの互換性を確認
+        let (default1, default2) = generate_with_both_generators(&["test"], &RegexOperator::Default);
+        assert_eq!(default1, default2);
+        assert_eq!(default1, "test");
+
+        let (vim1, vim2) = generate_with_both_generators(&["test"], &RegexOperator::Vim);
+        assert_eq!(vim1, vim2);
+        assert!(vim2.contains("\\_s*"));
+
+        let (emacs1, emacs2) = generate_with_both_generators(&["test"], &RegexOperator::Emacs);
+        assert_eq!(emacs1, emacs2);
+        assert!(emacs2.contains("\\_s-*"));
+
+        let user_op = RegexOperator::User {
+            or: "|".to_string(),
+            begin_group: "(".to_string(),
+            end_group: ")".to_string(),
+            begin_class: "[".to_string(),
+            end_class: "]".to_string(),
+            newline: "<NL>".to_string(),
+        };
+        let (user1, user2) = generate_with_both_generators(&["bad", "bat"], &user_op);
+        assert_eq!(user1, user2);
+        assert!(user2.contains("<NL>"));
     }
 }

@@ -172,6 +172,9 @@ fn generate(node: &Option<Box<TernaryRegexNode>>, buffer: &mut String, op: &Rege
                     buffer.push('\\');
                 }
                 buffer.push(n.code);
+                if !op.newline.is_empty() {
+                    buffer.push_str(&op.newline);
+                }
                 generate(&n.child, buffer, op);
                 is_first = false;
             }
