@@ -128,17 +128,21 @@ fn handle_connection(mut stream: TcpStream, dict: &CompactDictionary, rxop: &Reg
     let response = match (method, path) {
         (Some("GET"), Some(path_)) => {
             let query_str = path_.strip_prefix('/').unwrap_or(path_);
-            let decoded = percent_decode(query_str.as_bytes());
-            let body = query(decoded, dict, rxop);
-            format!(
-                "HTTP/1.1 200 OK\r\n\
-                Content-Type: text/plain; charset=utf-8\r\n\
-                Content-Length: {}\r\n\
-                \r\n\
-                {}",
-                body.len(),
-                body
-            )
+            match percent_decode(query_str.as_bytes()) {
+                Some(decoded) => {
+                    let body = query(decoded, dict, rxop);
+                    format!(
+                        "HTTP/1.1 200 OK\r\n\
+                        Content-Type: text/plain; charset=utf-8\r\n\
+                        Content-Length: {}\r\n\
+                        \r\n\
+                        {}",
+                        body.len(),
+                        body
+                    )
+                }
+                None => "HTTP/1.1 400 BAD REQUEST\r\n\r\n".to_string(),
+            }
         },
         _ => {
             "HTTP/1.1 404 NOT FOUND\r\n\r\n".to_string()
@@ -150,31 +154,71 @@ fn handle_connection(mut stream: TcpStream, dict: &CompactDictionary, rxop: &Reg
     stream.flush().unwrap()
 }
 
-fn percent_decode(bytes: &[u8]) -> String {
+fn percent_decode(bytes: &[u8]) -> Option<String> {
     let mut pos = 0;
     let mut buffer = Vec::with_capacity(bytes.len());
     let hex_to_decimal = |b| {
         match b {
-            b'0'..=b'9' => b - b'0',
-            b'A'..=b'F' => b - b'A' + 10,
-            b'a'..=b'f' => b - b'a' + 10,
-            _ => panic!(),
+            b'0'..=b'9' => Some(b - b'0'),
+            b'A'..=b'F' => Some(b - b'A' + 10),
+            b'a'..=b'f' => Some(b - b'a' + 10),
+            _ => None,
         }
     };
     while pos < bytes.len() {
         let byte = bytes[pos];
         if byte == b'+' {
             buffer.push(b' ');
-        } else if byte == b'%' && pos + 2 < bytes.len() {
-            let hex = hex_to_decimal(bytes[pos + 1]) * 16 + hex_to_decimal(bytes[pos + 2]);
+        } else if byte == b'%' {
+            if pos + 2 >= bytes.len() {
+                return None;
+            }
+            let high = hex_to_decimal(bytes[pos + 1])?;
+            let low = hex_to_decimal(bytes[pos + 2])?;
+            let hex = high * 16 + low;
             pos = pos + 2;
             buffer.push(hex);
         } else if byte > 0xf0 {
-            panic!();
+            return None;
         } else {
             buffer.push(byte);
         }
         pos = pos + 1;
     }
-    return String::from_utf8_lossy(&buffer).to_string();
+    Some(String::from_utf8_lossy(&buffer).to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::percent_decode;
+
+    #[test]
+    fn percent_decode_plain() {
+        assert_eq!(percent_decode(b"kensaku"), Some("kensaku".to_string()));
+    }
+
+    #[test]
+    fn percent_decode_encoded() {
+        assert_eq!(percent_decode(b"%41+%42"), Some("A B".to_string()));
+    }
+
+    #[test]
+    fn percent_decode_invalid_hex() {
+        assert_eq!(percent_decode(b"%GG"), None);
+    }
+
+    #[test]
+    fn percent_decode_trailing_percent() {
+        assert_eq!(percent_decode(b"abc%"), None);
+    }
+
+    #[test]
+    fn percent_decode_short_percent() {
+        assert_eq!(percent_decode(b"abc%A"), None);
+    }
+
+    #[test]
+    fn percent_decode_reject_large_byte() {
+        assert_eq!(percent_decode(&[0xf1]), None);
+    }
 }
