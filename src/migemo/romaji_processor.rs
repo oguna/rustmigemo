@@ -1,5 +1,5 @@
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use crate::migemo::bit_list::BitList;
 use crate::migemo::bit_vector::BitVector;
@@ -201,11 +201,6 @@ impl RomajiProcessor {
 }
 
 pub fn build(roman_entries: &[(&str, &str, usize)]) {
-    // ローマ字->(ひらがな,送り文字数)の辞書を構築
-    let mut dict = HashMap::<&str, (&str, usize)>::new();
-    for (roman_str, hiragana_str, remain) in roman_entries.iter() {
-        dict.insert(*roman_str, (*hiragana_str, *remain));
-    }
     // ローマ字を格納したLoudsTrieを構築
     let mut keys = roman_entries.iter()
         .map(|(roman_str, _, _)| roman_str.encode_utf16().collect::<Vec<u16>>())
@@ -244,8 +239,8 @@ pub fn build(roman_entries: &[(&str, &str, usize)]) {
         let hiragana_utf16: Vec<u16> = hiragana.encode_utf16().collect();
         let value_id = value_dict.get(&hiragana_utf16).unwrap();
         mapping[key_bits_index - 1] = (
-            value_id as u16,
-            *remain as u8,
+            u16::try_from(value_id).unwrap(),
+             u8::try_from(*remain).unwrap(),
         );
     }
     // 辞書を出力
