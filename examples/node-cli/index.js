@@ -38,7 +38,7 @@ for (let i = 2; i < process.argv.length; i++) {
             i++;
             word = process.argv[i];
             break;
-        case '--quite':
+        case '--quiet':
         case '-q':
             mode_quiet = true;
             break;
