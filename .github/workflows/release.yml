@@ -25,9 +25,17 @@ jobs:
             archive_ext: zip
             src_bin_name: rustmigemo-cli.exe
             dst_bin_name: rustmigemo.exe
+          
           - name: Linux x64
             os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
+            target: x86_64-unknown-linux-musl
+            archive_ext: tar.gz
+            src_bin_name: rustmigemo-cli
+            dst_bin_name: rustmigemo
+            
+          - name: macOS ARM64
+            os: macos-latest
+            target: aarch64-apple-darwin
             archive_ext: tar.gz
             src_bin_name: rustmigemo-cli
             dst_bin_name: rustmigemo
@@ -35,6 +43,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Install musl-tools (Linux only)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -49,7 +61,8 @@ jobs:
         run: |
           mkdir -p staging
           cp "target/${{ matrix.target }}/release/${{ matrix.src_bin_name }}" "staging/${{ matrix.dst_bin_name }}"
-          if [ "${{ runner.os }}" = "Linux" ]; then
+          # macOS と Linux の両方で実行権限を付与するように修正
+          if [ "${{ runner.os }}" != "Windows" ]; then
             chmod +x "staging/${{ matrix.dst_bin_name }}"
           fi
 
@@ -61,8 +74,8 @@ jobs:
         run: |
           Compress-Archive -Path staging/* -DestinationPath "${{ env.BIN_NAME }}-${{ matrix.target }}.${{ matrix.archive_ext }}"
 
-      - name: Pack archive (Linux)
-        if: runner.os == 'Linux'
+      - name: Pack archive (Unix)
+        if: runner.os != 'Windows'
         run: |
           tar -czf "${{ env.BIN_NAME }}-${{ matrix.target }}.${{ matrix.archive_ext }}" -C staging .
 
