@@ -6,6 +6,12 @@ use super::romaji_processor::RomajiProcessor;
 use std::iter::Peekable;
 use std::str::CharIndices;
 use std::char::{decode_utf16, REPLACEMENT_CHARACTER};
+use std::sync::OnceLock;
+
+fn romaji_processor() -> &'static RomajiProcessor {
+    static ROMAJI_PROCESSOR: OnceLock<RomajiProcessor> = OnceLock::new();
+    ROMAJI_PROCESSOR.get_or_init(RomajiProcessor::new)
+}
 
 pub fn query_a_word(word: &str, dict: &CompactDictionary, operator: &RegexOperator) -> String {
     query_a_word_with_generator(word, dict, operator, &mut TernaryRegexGenerator::new())
@@ -36,8 +42,7 @@ pub fn query_a_word_with_generator<T: RegexGeneratorTrait>(
     let han_chars: Vec<char> = han_str.chars().collect();
     generator.add(&han_chars);
 
-    let processor = RomajiProcessor::new();
-    let hiragana = processor.romaji_to_hiragana_predictively(&lower);
+    let hiragana = romaji_processor().romaji_to_hiragana_predictively(&lower);
     for suffix in hiragana.suffixes {
         let mut hira = hiragana.prefix.clone();
         hira.extend(suffix);
