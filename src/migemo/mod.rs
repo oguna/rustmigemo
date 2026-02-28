@@ -8,3 +8,4 @@ pub mod query;
 pub mod bit_list;
 pub mod ternary_regex_generator;
 pub mod compact_dictionary_builder;
+pub mod sorted_array_trie;
