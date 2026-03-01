@@ -1,11 +1,11 @@
+pub mod bit_list;
 pub mod bit_vector;
 pub mod character_converter;
 pub mod compact_dictionary;
+pub mod compact_dictionary_builder;
 pub mod louds_trie;
+pub mod query;
 pub mod regex_generator;
 pub mod romaji_processor;
-pub mod query;
-pub mod bit_list;
-pub mod ternary_regex_generator;
-pub mod compact_dictionary_builder;
 pub mod sorted_array_trie;
+pub mod ternary_regex_generator;

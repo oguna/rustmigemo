@@ -1,4 +1,3 @@
-
 #[derive(Debug)]
 pub struct BitList {
     words: Vec<u64>,
@@ -21,7 +20,7 @@ impl BitList {
 
     pub fn new_with_size(size: usize) -> BitList {
         BitList {
-            words: vec![0; (size+63)/64],
+            words: vec![0; (size + 63) / 64],
             size: size,
         }
     }
@@ -45,9 +44,9 @@ impl BitList {
             panic!("index out of bounds: the len is {} but the index is {}", self.size, pos);
         }
         if value {
-            self.words[pos/64] |= 1 << (pos % 64);
+            self.words[pos / 64] |= 1 << (pos % 64);
         } else {
-            self.words[pos/64] &= !(1 << (pos % 64));
+            self.words[pos / 64] &= !(1 << (pos % 64));
         }
     }
 
@@ -55,7 +54,7 @@ impl BitList {
         if self.size <= pos {
             panic!("index out of bounds: the len is {} but the index is {}", self.size, pos);
         }
-        (self.words[pos/64] >> (pos%64)) & 1 == 1
+        (self.words[pos / 64] >> (pos % 64)) & 1 == 1
     }
 
     pub fn words(&self) -> &[u64] {

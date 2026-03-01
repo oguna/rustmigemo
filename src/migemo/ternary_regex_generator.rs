@@ -1,11 +1,11 @@
-use super::regex_generator::{RegexOperator, RegexOperatorDetail, RegexGeneratorTrait};
+use super::regex_generator::{RegexGeneratorTrait, RegexOperator, RegexOperatorDetail};
 
 #[derive(Debug)]
 pub struct TernaryRegexNode {
-	pub code: char,
-	pub child: Option<Box<TernaryRegexNode>>,
-	pub left: Option<Box<TernaryRegexNode>>,
-	pub right: Option<Box<TernaryRegexNode>>,
+    pub code: char,
+    pub child: Option<Box<TernaryRegexNode>>,
+    pub left: Option<Box<TernaryRegexNode>>,
+    pub right: Option<Box<TernaryRegexNode>>,
     pub level: usize,
 }
 
@@ -19,7 +19,7 @@ fn skew(t: Option<Box<TernaryRegexNode>>) -> Option<Box<TernaryRegexNode>> {
     match t {
         None => {
             return None;
-        },
+        }
         Some(mut t1) => {
             if let Some(left) = &t1.left {
                 if left.level == t1.level {
@@ -62,15 +62,15 @@ fn insert(word: &[char], offset: usize, t: Option<Box<TernaryRegexNode>>) -> Opt
     match t {
         None => {
             let mut r = Box::new(TernaryRegexNode {
-				code: word[offset],
+                code: word[offset],
                 level: 1,
                 left: None,
                 right: None,
-                child: None
-			});
+                child: None,
+            });
             r.child = insert(word, offset + 1, None);
             return Some(r);
-        },
+        }
         Some(mut tt) => {
             let x = word[offset];
             if x < tt.code {
@@ -79,7 +79,7 @@ fn insert(word: &[char], offset: usize, t: Option<Box<TernaryRegexNode>>) -> Opt
                 tt.right = insert(word, offset, tt.right)
             } else {
                 if tt.child.is_some() {
-                    tt.child = insert(word, offset+1, tt.child);
+                    tt.child = insert(word, offset + 1, tt.child);
                 }
                 return Some(tt);
             };
@@ -90,8 +90,7 @@ fn insert(word: &[char], offset: usize, t: Option<Box<TernaryRegexNode>>) -> Opt
 
 fn traverse_siblings<'a>(node: &'a Option<Box<TernaryRegexNode>>, buffer: &mut Vec<&'a Box<TernaryRegexNode>>) {
     match node {
-        None => {
-        },
+        None => {}
         Some(n) => {
             traverse_siblings(&n.left, buffer);
             buffer.push(n);
@@ -120,7 +119,7 @@ const fn generate_escape_bitmap() -> [u64; 2] {
 
 fn is_characters_to_escape(c: char) -> bool {
     if c < '\u{80}' {
-        return (ESCAPE_BITMAP[(c as usize)/64]>>((c as u64)%64))&1 == 1;
+        return (ESCAPE_BITMAP[(c as usize) / 64] >> ((c as u64) % 64)) & 1 == 1;
     } else {
         return false;
     }
@@ -187,9 +186,7 @@ fn generate(node: &Option<Box<TernaryRegexNode>>, buffer: &mut String, op: &Rege
 
 impl TernaryRegexGenerator {
     pub fn new() -> TernaryRegexGenerator {
-        return TernaryRegexGenerator {
-            root: None,
-        }
+        return TernaryRegexGenerator { root: None };
     }
 
     pub fn add(&mut self, word: &[char]) {
@@ -205,7 +202,7 @@ impl TernaryRegexGenerator {
         } else {
             let op_detail = RegexOperatorDetail::get_regex_operator_detail(op);
             let mut buffer = String::new();
-            generate(& self.root, &mut buffer, &op_detail);
+            generate(&self.root, &mut buffer, &op_detail);
             return buffer;
         }
     }
@@ -225,7 +222,7 @@ impl RegexGeneratorTrait for TernaryRegexGenerator {
         } else {
             let op_detail = RegexOperatorDetail::get_regex_operator_detail(op);
             let mut buffer = String::new();
-            generate(& self.root, &mut buffer, &op_detail);
+            generate(&self.root, &mut buffer, &op_detail);
             return buffer;
         }
     }

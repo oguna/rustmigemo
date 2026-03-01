@@ -42,11 +42,7 @@ impl BitVector {
         let mut sum: u32 = 0;
         let mut sum_in_lb: u32 = 0;
         for i in 0..sb.len() {
-            let bit_count = if i < words.len() {
-                u64::count_ones(words[i])
-            } else {
-                0
-            };
+            let bit_count = if i < words.len() { u64::count_ones(words[i]) } else { 0 };
             sb[i] = sum_in_lb as u16;
             sum_in_lb = sum_in_lb + bit_count;
             if (i & 7) == 7 {
@@ -68,13 +64,13 @@ impl BitVector {
         let mut count1 = self.sb[(pos / 64) as usize] as usize + self.lb[(pos / 512) as usize] as usize;
         let word = self.words[(pos / 64) as usize];
         let shift_size = 64 - (pos & 63);
-        let mask = if shift_size == 64 { 0 } else {0xFFFFFFFFFFFFFFFFu64 >> shift_size};
-        count1 = count1 + u64::count_ones(word & mask) as usize;
-        return if b {
-            count1
+        let mask = if shift_size == 64 {
+            0
         } else {
-            pos - count1
+            0xFFFFFFFFFFFFFFFFu64 >> shift_size
         };
+        count1 = count1 + u64::count_ones(word & mask) as usize;
+        return if b { count1 } else { pos - count1 };
     }
 
     pub fn select(&self, count: usize, b: bool) -> usize {
@@ -85,7 +81,9 @@ impl BitVector {
         } else {
             count - (512 * lb_index - self.lb[lb_index as usize] as usize) as usize
         };
-        let sb_index = self.lower_bound_binary_search_sb(count_in_lb as u16, lb_index as usize * 8, lb_index as usize * 8 + 8, b) - 1;
+        let sb_index =
+            self.lower_bound_binary_search_sb(count_in_lb as u16, lb_index as usize * 8, lb_index as usize * 8 + 8, b)
+                - 1;
         let count_in_sb = if b {
             count_in_lb - self.sb[sb_index] as usize
         } else {
@@ -187,7 +185,7 @@ impl BitVector {
         let mut high = to_index as isize;
         let mut low = from_index as isize - 1;
         if b {
-            while high-low > 1 {
+            while high - low > 1 {
                 let mid = (high + low) / 2;
                 if self.sb[mid as usize] < key {
                     low = mid;
@@ -196,9 +194,9 @@ impl BitVector {
                 }
             }
         } else {
-            while high-low > 1 {
+            while high - low > 1 {
                 let mid = (high + low) >> 1;
-                if (((mid&7) <<6) as u16)-self.sb[mid as usize] < key {
+                if (((mid & 7) << 6) as u16) - self.sb[mid as usize] < key {
                     low = mid;
                 } else {
                     high = mid;
@@ -245,17 +243,16 @@ impl BitVector {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use rand::prelude::*;
 
     fn bits_to_words(bits: &Vec<bool>) -> Vec<u64> {
-        let mut words = vec![0; (bits.len()+63)/64];
+        let mut words = vec![0; (bits.len() + 63) / 64];
         for i in 0..bits.len() {
             if bits[i] {
-                words[i/64] |= 1 << (i & 63);
+                words[i / 64] |= 1 << (i & 63);
             }
         }
         return words;
@@ -329,10 +326,10 @@ mod tests {
         let bitvector = BitVector::new(words, SIZE);
         let count0 = bits.len() - count1;
         for i in 1..count1 {
-            assert_eq!(select(&bits, i ,true).unwrap(), bitvector.select(i, true));
+            assert_eq!(select(&bits, i, true).unwrap(), bitvector.select(i, true));
         }
         for i in 1..count0 {
-            assert_eq!(select(&bits, i , false).unwrap(), bitvector.select(i, false));
+            assert_eq!(select(&bits, i, false).unwrap(), bitvector.select(i, false));
         }
     }
 
@@ -418,4 +415,3 @@ mod tests {
         }
     }
 }
-

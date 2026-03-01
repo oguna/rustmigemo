@@ -1,4 +1,3 @@
-
 use std::collections::HashSet;
 
 use crate::migemo::bit_list::BitList;
@@ -98,9 +97,7 @@ impl RomajiProcessor {
     }
 
     fn mapping_entry(&self, node_index: usize) -> Option<&MappingEntry> {
-        self.node_mappings
-            .get(node_index)
-            .and_then(|entry| entry.as_ref())
+        self.node_mappings.get(node_index).and_then(|entry| entry.as_ref())
     }
 
     fn terminal_nodes_for_prefix(&self, prefix: &[u16]) -> Vec<usize> {
@@ -157,10 +154,8 @@ impl RomajiProcessor {
                                     self.value_trie
                                         .get_key_into(entry.value_index as usize, &mut value_buffer);
                                     let mut combined = value_buffer.clone();
-                                    self.value_trie.get_key_into(
-                                        next_entry.value_index as usize,
-                                        &mut value_buffer,
-                                    );
+                                    self.value_trie
+                                        .get_key_into(next_entry.value_index as usize, &mut value_buffer);
                                     combined.extend_from_slice(&value_buffer);
                                     set.insert(combined);
                                 }
@@ -197,18 +192,19 @@ impl RomajiProcessor {
             suffixes: vec![vec![]],
         }
     }
-
 }
 
 pub fn build(roman_entries: &[(&str, &str, usize)]) {
     // ローマ字を格納したLoudsTrieを構築
-    let mut keys = roman_entries.iter()
+    let mut keys = roman_entries
+        .iter()
         .map(|(roman_str, _, _)| roman_str.encode_utf16().collect::<Vec<u16>>())
         .collect::<Vec<Vec<u16>>>();
     keys.sort();
     let (key_dict, _key_index) = LoudsTrie::build(&keys);
     // ひらがなを格納したLoudsTrieを構築
-    let mut values = roman_entries.iter()
+    let mut values = roman_entries
+        .iter()
         .map(|(_, hiragana_str, _)| hiragana_str.encode_utf16().collect::<Vec<u16>>())
         .collect::<Vec<Vec<u16>>>();
     values.sort();
@@ -222,10 +218,7 @@ pub fn build(roman_entries: &[(&str, &str, usize)]) {
         let terminal_flags_vec = key_dict.get(&keys[i]).unwrap();
         terminal_flags.set(terminal_flags_vec, true);
     }
-    let key_bitvec = BitVector::new(
-        terminal_flags.words().to_vec(),
-        terminal_flags.len(),
-    );
+    let key_bitvec = BitVector::new(terminal_flags.words().to_vec(), terminal_flags.len());
     let mut mapping = vec![(0u16, 0u8); roman_entries.len()];
     for (roman, hiragana, remain) in roman_entries.iter() {
         let roman_utf16: Vec<u16> = roman.encode_utf16().collect();
@@ -238,10 +231,7 @@ pub fn build(roman_entries: &[(&str, &str, usize)]) {
         }
         let hiragana_utf16: Vec<u16> = hiragana.encode_utf16().collect();
         let value_id = value_dict.get(&hiragana_utf16).unwrap();
-        mapping[key_bits_index - 1] = (
-            u16::try_from(value_id).unwrap(),
-             u8::try_from(*remain).unwrap(),
-        );
+        mapping[key_bits_index - 1] = (u16::try_from(value_id).unwrap(), u8::try_from(*remain).unwrap());
     }
     // 辞書を出力
     println!("Key LoudsTrie size: {}", key_dict.bit_vector.size());
@@ -258,7 +248,7 @@ pub fn build(roman_entries: &[(&str, &str, usize)]) {
     println!("Value LoudsTrie size: {}", value_dict.size());
     println!("Value LoudsTrie bit vector: {:?}", value_dict.bit_vector.words());
     println!("Value LoudsTrie edges: {:?}", value_dict.edges);
-       println!(
+    println!(
         "Value LoudsTrie as string: {}",
         value_dict
             .edges
@@ -300,10 +290,41 @@ const ROMAJI_VALUE_TRIE_BITS: [u64; 7] = [
     0,
 ];
 const ROMAJI_KEY_TERMINAL_SIZE: usize = 376;
-const ROMAJI_KEY_TERMINAL_BITS: [u64; 6] = [18004528185146902780, 18302058713675791613, 18066044213155258366, 18446744056529649663, 18446744073642442743, 72057319160020987];
+const ROMAJI_KEY_TERMINAL_BITS: [u64; 6] = [
+    18004528185146902780,
+    18302058713675791613,
+    18066044213155258366,
+    18446744056529649663,
+    18446744073642442743,
+    72057319160020987,
+];
 
-const ROMAJI_MAPPING_INDEX: [u16; 312] = [9, 103, 10, 11, 12, 17, 23, 19, 98, 25, 21, 15, 63, 50, 72, 66, 75, 69, 26, 50, 42, 38, 34, 30, 47, 50, 54, 49, 56, 52, 193, 195, 50, 194, 196, 68, 27, 33, 50, 29, 35, 31, 62, 71, 50, 65, 74, 68, 136, 135, 39, 50, 138, 137, 26, 32, 28, 50, 34, 30, 16, 22, 18, 50, 24, 20, 77, 80, 78, 50, 81, 79, 98, 57, 60, 58, 98, 61, 59, 64, 73, 67, 76, 50, 70, 119, 122, 120, 123, 50, 30, 88, 91, 89, 92, 50, 90, 36, 42, 38, 44, 50, 40, 46, 53, 48, 55, 50, 51, 210, 212, 211, 213, 99, 50, 94, 107, 106, 97, 21, 50, 16, 22, 18, 98, 24, 20, 50, 83, 104, 87, 85, 50, 3, 15, 4, 102, 13, 14, 37, 43, 5, 39, 8, 6, 7, 45, 41, 50, 185, 184, 183, 187, 186, 141, 140, 48, 143, 142, 141, 140, 139, 143, 142, 158, 170, 160, 159, 158, 162, 161, 168, 171, 169, 172, 170, 146, 145, 144, 148, 147, 197, 199, 198, 124, 127, 125, 128, 126, 116, 115, 114, 118, 117, 193, 195, 194, 196, 180, 179, 178, 182, 181, 136, 135, 134, 138, 137, 119, 122, 120, 123, 121, 111, 110, 109, 113, 112, 100, 101, 50, 93, 82, 22, 18, 86, 84, 202, 201, 200, 204, 203, 175, 174, 173, 177, 176, 190, 189, 188, 192, 191, 207, 206, 205, 209, 208, 131, 130, 38, 133, 132, 131, 130, 129, 133, 132, 153, 165, 155, 154, 153, 157, 156, 149, 151, 150, 152, 51, 163, 166, 164, 167, 165, 141, 140, 139, 143, 142, 214, 212, 211, 216, 215, 105, 107, 106, 108, 21, 2, 96, 95, 100, 101, 50, 93, 82, 22, 18, 86, 84, 136, 135, 134, 138, 137, 161, 198, 50, 156, 50, 0];
-const ROMAJI_MAPPING_REMAIN: [u8; 312] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+const ROMAJI_MAPPING_INDEX: [u16; 312] = [
+    9, 103, 10, 11, 12, 17, 23, 19, 98, 25, 21, 15, 63, 50, 72, 66, 75, 69, 26, 50, 42, 38, 34, 30, 47, 50, 54, 49, 56,
+    52, 193, 195, 50, 194, 196, 68, 27, 33, 50, 29, 35, 31, 62, 71, 50, 65, 74, 68, 136, 135, 39, 50, 138, 137, 26, 32,
+    28, 50, 34, 30, 16, 22, 18, 50, 24, 20, 77, 80, 78, 50, 81, 79, 98, 57, 60, 58, 98, 61, 59, 64, 73, 67, 76, 50, 70,
+    119, 122, 120, 123, 50, 30, 88, 91, 89, 92, 50, 90, 36, 42, 38, 44, 50, 40, 46, 53, 48, 55, 50, 51, 210, 212, 211,
+    213, 99, 50, 94, 107, 106, 97, 21, 50, 16, 22, 18, 98, 24, 20, 50, 83, 104, 87, 85, 50, 3, 15, 4, 102, 13, 14, 37,
+    43, 5, 39, 8, 6, 7, 45, 41, 50, 185, 184, 183, 187, 186, 141, 140, 48, 143, 142, 141, 140, 139, 143, 142, 158, 170,
+    160, 159, 158, 162, 161, 168, 171, 169, 172, 170, 146, 145, 144, 148, 147, 197, 199, 198, 124, 127, 125, 128, 126,
+    116, 115, 114, 118, 117, 193, 195, 194, 196, 180, 179, 178, 182, 181, 136, 135, 134, 138, 137, 119, 122, 120, 123,
+    121, 111, 110, 109, 113, 112, 100, 101, 50, 93, 82, 22, 18, 86, 84, 202, 201, 200, 204, 203, 175, 174, 173, 177,
+    176, 190, 189, 188, 192, 191, 207, 206, 205, 209, 208, 131, 130, 38, 133, 132, 131, 130, 129, 133, 132, 153, 165,
+    155, 154, 153, 157, 156, 149, 151, 150, 152, 51, 163, 166, 164, 167, 165, 141, 140, 139, 143, 142, 214, 212, 211,
+    216, 215, 105, 107, 106, 108, 21, 2, 96, 95, 100, 101, 50, 93, 82, 22, 18, 86, 84, 136, 135, 134, 138, 137, 161,
+    198, 50, 156, 50, 0,
+];
+const ROMAJI_MAPPING_REMAIN: [u8; 312] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+    1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+    1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
+];
 
 #[cfg(test)]
 mod tests {
@@ -361,11 +382,7 @@ mod tests {
         let kensaku: Vec<u16> = romaji.encode_utf16().collect();
         let actual = dict.romaji_to_hiragana_predictively(&kensaku);
         let prefix = String::from_utf16(&actual.prefix).unwrap();
-        let mut suffixes: Vec<String> = actual
-            .suffixes
-            .iter()
-            .map(|x| String::from_utf16(x).unwrap())
-            .collect();
+        let mut suffixes: Vec<String> = actual.suffixes.iter().map(|x| String::from_utf16(x).unwrap()).collect();
         suffixes.sort();
         (prefix, suffixes)
     }

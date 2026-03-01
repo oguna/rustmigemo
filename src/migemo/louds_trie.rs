@@ -20,22 +20,22 @@ impl<'a> Iterator for LoudsTriePredictiveSearchIter<'a> {
         } else {
             let lower_select = self.trie.bit_vector.select(self.lower, false);
             let upper_select = self.trie.bit_vector.select(self.upper, false);
-            
+
             if lower_select + 1 <= self.trie.bit_vector.size() {
                 self.lower = self.trie.bit_vector.rank(lower_select + 1, true) + 1;
             } else {
                 self.lower = self.trie.bit_vector.rank(self.trie.bit_vector.size(), true) + 1;
             }
-            
+
             if upper_select + 1 <= self.trie.bit_vector.size() {
                 self.upper = self.trie.bit_vector.rank(upper_select + 1, true) + 1;
             } else {
                 self.upper = self.trie.bit_vector.rank(self.trie.bit_vector.size(), true) + 1;
             }
-            
+
             self.cursor = self.lower;
             if self.lower == self.upper {
-                return None
+                return None;
             } else {
                 return Some(self.lower);
             }
@@ -63,10 +63,7 @@ impl<'a, 'b> Iterator for LoudsTrieCommonPrefixSearchIter<'a, 'b> {
             self.finished = true;
             return None;
         }
-        match self
-            .trie
-            .traverse(self.node_index as u32, self.key[self.position])
-        {
+        match self.trie.traverse(self.node_index as u32, self.key[self.position]) {
             Some(next_node) => {
                 self.node_index = next_node;
                 self.position += 1;
@@ -88,7 +85,12 @@ pub struct LoudsTrie {
 
 impl LoudsTrie {
     pub fn get_key(&self, mut index: usize) -> Vec<u16> {
-        assert!(index > 0 && index < self.edges.len(), "get_key: Index {} is out of bounds (1..{})", index, self.edges.len());
+        assert!(
+            index > 0 && index < self.edges.len(),
+            "get_key: Index {} is out of bounds (1..{})",
+            index,
+            self.edges.len()
+        );
         let mut sb: Vec<u16> = Vec::new();
         while index > 1 {
             sb.push(self.edges[index]);
@@ -99,7 +101,12 @@ impl LoudsTrie {
     }
 
     pub fn get_key_into(&self, mut index: usize, target: &mut Vec<u16>) -> usize {
-        assert!(index > 0 && index < self.edges.len(), "get_key_into: Index {} is out of bounds (1..{})", index, self.edges.len());
+        assert!(
+            index > 0 && index < self.edges.len(),
+            "get_key_into: Index {} is out of bounds (1..{})",
+            index,
+            self.edges.len()
+        );
         target.clear();
         while index > 1 {
             target.push(self.edges[index]);
@@ -110,9 +117,7 @@ impl LoudsTrie {
     }
 
     pub fn parent(&self, x: usize) -> usize {
-        return self
-            .bit_vector
-            .rank(self.bit_vector.select(x, true), false);
+        return self.bit_vector.rank(self.bit_vector.select(x, true), false);
     }
 
     pub fn first_child(&self, x: usize) -> Option<usize> {
@@ -166,10 +171,7 @@ impl LoudsTrie {
         };
     }
 
-    pub fn common_prefix_search<'a, 'b>(
-        &'a self,
-        key: &'b [u16],
-    ) -> LoudsTrieCommonPrefixSearchIter<'a, 'b> {
+    pub fn common_prefix_search<'a, 'b>(&'a self, key: &'b [u16]) -> LoudsTrieCommonPrefixSearchIter<'a, 'b> {
         LoudsTrieCommonPrefixSearchIter {
             trie: self,
             key,
@@ -233,8 +235,7 @@ impl LoudsTrie {
         let num_of_children = child_sizes[1..=current_node].iter().sum::<u32>();
 
         let num_of_nodes = current_node;
-        let mut bit_vector_words =
-            vec![0u64; ((num_of_children + num_of_nodes as u32 + 63 + 1) / 64) as usize];
+        let mut bit_vector_words = vec![0u64; ((num_of_children + num_of_nodes as u32 + 63 + 1) / 64) as usize];
         let mut bit_vector_index = 1;
         bit_vector_words[0] = 1;
         for i in 1..=current_node {
@@ -262,7 +263,10 @@ mod tests {
 
     #[test]
     fn test_build_1() {
-        let words: Vec<Vec<u16>> = vec!["baby", "bad", "bank", "box", "dad", "dance"].iter().map(|x| x.encode_utf16().collect()).collect();
+        let words: Vec<Vec<u16>> = vec!["baby", "bad", "bank", "box", "dad", "dance"]
+            .iter()
+            .map(|x| x.encode_utf16().collect())
+            .collect();
         let (trie, x) = LoudsTrie::build(&words);
         println!("{:?}", x);
         let box_utf16: Vec<u16> = "box".encode_utf16().collect();
@@ -270,20 +274,28 @@ mod tests {
         assert_eq!(actual, Some(10));
         assert_eq!(trie.bit_vector.words(), vec![1145789805]);
         assert_eq!(trie.bit_vector.size(), 32);
-        assert_eq!(trie.edges, vec![32, 32, 98, 100, 97, 111, 97, 98, 100, 110, 120, 100, 110, 121,107, 99, 101]);
+        assert_eq!(
+            trie.edges,
+            vec![
+                32, 32, 98, 100, 97, 111, 97, 98, 100, 110, 120, 100, 110, 121, 107, 99, 101
+            ]
+        );
     }
 
     #[test]
     fn test_common_prefix_search() {
-        let words: Vec<Vec<u16>> = vec!["a", "ab", "abc", "abcd"].iter().map(|x| x.encode_utf16().collect()).collect();
+        let words: Vec<Vec<u16>> = vec!["a", "ab", "abc", "abcd"]
+            .iter()
+            .map(|x| x.encode_utf16().collect())
+            .collect();
         let (trie, _) = LoudsTrie::build(&words);
-        
+
         let query: Vec<u16> = "abcd".encode_utf16().collect();
         let result: Vec<_> = trie.common_prefix_search(&query).collect();
-        
+
         // Should find all prefixes: "a", "ab", "abc", "abcd"
         assert_eq!(result.len(), 4);
-        
+
         // Verify each result is a valid node
         for node_index in result {
             assert!(node_index > 0 && node_index < trie.edges.len());
@@ -292,12 +304,15 @@ mod tests {
 
     #[test]
     fn test_common_prefix_search_partial() {
-        let words: Vec<Vec<u16>> = vec!["baby", "bad", "bank"].iter().map(|x| x.encode_utf16().collect()).collect();
+        let words: Vec<Vec<u16>> = vec!["baby", "bad", "bank"]
+            .iter()
+            .map(|x| x.encode_utf16().collect())
+            .collect();
         let (trie, _) = LoudsTrie::build(&words);
-        
+
         let query: Vec<u16> = "ba".encode_utf16().collect();
         let result: Vec<_> = trie.common_prefix_search(&query).collect();
-        
+
         // Should find "b" and "ba" positions in the trie
         assert_eq!(result.len(), 2);
     }

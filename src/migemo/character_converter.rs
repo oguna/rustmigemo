@@ -1,4 +1,3 @@
-
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
@@ -6,15 +5,11 @@ static HAN2ZEN_MAP: OnceLock<HashMap<char, char>> = OnceLock::new();
 static ZEN2HAN_MAP: OnceLock<HashMap<char, &'static str>> = OnceLock::new();
 
 fn get_han2zen_map() -> &'static HashMap<char, char> {
-    HAN2ZEN_MAP.get_or_init(|| {
-        HAN2ZEN.iter().cloned().collect()
-    })
+    HAN2ZEN_MAP.get_or_init(|| HAN2ZEN.iter().cloned().collect())
 }
 
 fn get_zen2han_map() -> &'static HashMap<char, &'static str> {
-    ZEN2HAN_MAP.get_or_init(|| {
-        ZEN2HAN.iter().cloned().collect()
-    })
+    ZEN2HAN_MAP.get_or_init(|| ZEN2HAN.iter().cloned().collect())
 }
 
 pub fn han2zen(source: String) -> String {

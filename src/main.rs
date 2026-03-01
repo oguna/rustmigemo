@@ -5,10 +5,10 @@ use std::io;
 use std::io::Read;
 use std::io::Write;
 
+use pico_args::Arguments;
 use rustmigemo::migemo::compact_dictionary::*;
 use rustmigemo::migemo::query::*;
 use rustmigemo::migemo::regex_generator::*;
-use pico_args::Arguments;
 
 fn print_usage(program: &str) {
     let brief = format!("Usage: {} [options]", program);
@@ -26,7 +26,7 @@ fn print_usage(program: &str) {
 fn main() {
     // プログラム名を取得
     let program = env::args().next().unwrap_or_else(|| "rustmigemo".to_string());
-    
+
     // pico-argsを使って引数を解析
     let mut args = Arguments::from_env();
 
@@ -38,10 +38,11 @@ fn main() {
 
     // 各オプションを解析
     // エラーが発生した場合は、メッセージを表示して終了
-    let dictfile = args.opt_value_from_str(["-d", "--dict"])
+    let dictfile = args
+        .opt_value_from_str(["-d", "--dict"])
         .unwrap_or(None)
         .unwrap_or_else(|| "migemo-compact-dict".to_string());
-    
+
     let quiet = args.contains(["-q", "--quiet"]);
     let word: Option<String> = args.opt_value_from_str(["-w", "--word"]).unwrap_or(None);
 
@@ -83,9 +84,7 @@ fn main() {
                 print!("QUERY: ");
                 io::stdout().flush().unwrap();
             }
-            io::stdin()
-                .read_line(&mut line)
-                .expect("Failed to read line");
+            io::stdin().read_line(&mut line).expect("Failed to read line");
             if line.trim().is_empty() {
                 break;
             }

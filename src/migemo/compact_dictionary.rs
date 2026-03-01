@@ -1,5 +1,5 @@
-use super::bit_vector::BitVector;
 use super::bit_list::BitList;
+use super::bit_vector::BitVector;
 use super::louds_trie::LoudsTrie;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::Cursor;
@@ -27,9 +27,11 @@ impl<'a> Iterator for SearchIter<'a> {
         if self.i < self.size {
             let _i = self.i;
             self.i = self.i + 1;
-            return Some(self.dict.value_trie.get_key(
-                self.dict.mapping[self.value_start_pos - (self.offset as usize) + _i] as usize,
-            ));
+            return Some(
+                self.dict
+                    .value_trie
+                    .get_key(self.dict.mapping[self.value_start_pos - (self.offset as usize) + _i] as usize),
+            );
         } else {
             return None;
         }
@@ -63,9 +65,7 @@ impl<'a> Iterator for PredictiveSearchIter<'a> {
             let next_values = self.key_node_indices.find_map(|node_index| {
                 if node_index < dict.has_mapping_bit_list.len() && dict.has_mapping_bit_list.get(node_index) {
                     let value_start_pos = dict.mapping_bit_vector.select(node_index, false);
-                    let value_end_pos = dict
-                        .mapping_bit_vector
-                        .next_clear_bit(value_start_pos + 1);
+                    let value_end_pos = dict.mapping_bit_vector.next_clear_bit(value_start_pos + 1);
                     let size = value_end_pos - value_start_pos - 1;
 
                     if size > 0 {
@@ -93,13 +93,11 @@ impl CompactDictionary {
         let key_trie = CompactDictionary::read_trie(&mut cursor, true);
         let value_trie = CompactDictionary::read_trie(&mut cursor, false);
         let mapping_bit_vector_size = cursor.read_u32::<BigEndian>().unwrap() as usize;
-        let mut mapping_bit_vector_words =
-            vec![0; (mapping_bit_vector_size + 63) / 64];
+        let mut mapping_bit_vector_words = vec![0; (mapping_bit_vector_size + 63) / 64];
         for i in 0..mapping_bit_vector_words.len() {
             mapping_bit_vector_words[i] = cursor.read_u64::<BigEndian>().unwrap();
         }
-        let mapping_bit_vector =
-            BitVector::new(mapping_bit_vector_words, mapping_bit_vector_size);
+        let mapping_bit_vector = BitVector::new(mapping_bit_vector_words, mapping_bit_vector_size);
         let mapping_size = cursor.read_u32::<BigEndian>().unwrap();
         let mut mapping: Vec<u32> = vec![0; mapping_size as usize];
         for i in 0..mapping_size {
@@ -127,13 +125,11 @@ impl CompactDictionary {
             key_trie_edges[i as usize] = c;
         }
         let key_trie_bit_vector_size = cursor.read_u32::<BigEndian>().unwrap();
-        let mut key_trie_bit_vector_words: Vec<u64> =
-            vec![0; (key_trie_bit_vector_size as usize + 63) / 64];
+        let mut key_trie_bit_vector_words: Vec<u64> = vec![0; (key_trie_bit_vector_size as usize + 63) / 64];
         for i in 0..key_trie_bit_vector_words.len() {
             key_trie_bit_vector_words[i] = cursor.read_u64::<BigEndian>().unwrap();
         }
-        let bit_vector =
-            BitVector::new(key_trie_bit_vector_words, key_trie_bit_vector_size as usize);
+        let bit_vector = BitVector::new(key_trie_bit_vector_words, key_trie_bit_vector_size as usize);
         let louds_trie = LoudsTrie {
             bit_vector: bit_vector,
             edges: key_trie_edges,
@@ -154,22 +150,22 @@ impl CompactDictionary {
     }
 
     fn decode(b: u8) -> u16 {
-    match b {
-        // NULL文字
-        0x00 => 0,
-        // ASCIIの範囲 (0x20 ~ 0x7E)
-        0x20..=0x7E => b as u16,
-        // ひらがなの範囲 (0xA1 ~ 0xF6)
-        0xA1..=0xF6 => {
-            let code_point = (b as u32) - 0xA0 + 0x3040;
-            code_point as u16
+        match b {
+            // NULL文字
+            0x00 => 0,
+            // ASCIIの範囲 (0x20 ~ 0x7E)
+            0x20..=0x7E => b as u16,
+            // ひらがなの範囲 (0xA1 ~ 0xF6)
+            0xA1..=0xF6 => {
+                let code_point = (b as u32) - 0xA0 + 0x3040;
+                code_point as u16
+            }
+            // 長音符 'ー'
+            0xF7 => 0x30fc,
+            // 未定義のバイト列が来た場合は 0 を返す
+            _ => 0,
         }
-        // 長音符 'ー'
-        0xF7 => 0x30fc,
-        // 未定義のバイト列が来た場合は 0 を返す
-        _ => 0,
     }
-}
 
     pub fn search(&self, key: &Vec<u16>) -> SearchIter<'_> {
         let key_index = self.key_trie.get(key);

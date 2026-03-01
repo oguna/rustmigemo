@@ -26,11 +26,8 @@ impl SortedArrayTrie {
 
         for prefix_len in 1..=key.len() {
             let prefix = &key[..prefix_len];
-            start += self.keys[start..end]
-                .partition_point(|candidate| candidate.as_slice() < prefix);
-            end = start
-                + self.keys[start..end]
-                    .partition_point(|candidate| candidate.as_slice().starts_with(prefix));
+            start += self.keys[start..end].partition_point(|candidate| candidate.as_slice() < prefix);
+            end = start + self.keys[start..end].partition_point(|candidate| candidate.as_slice().starts_with(prefix));
 
             if start == end {
                 break;
@@ -48,8 +45,7 @@ impl SortedArrayTrie {
         }
 
         let start = self.keys.partition_point(|candidate| candidate.as_slice() < key);
-        let end = start
-            + self.keys[start..].partition_point(|candidate| candidate.as_slice().starts_with(key));
+        let end = start + self.keys[start..].partition_point(|candidate| candidate.as_slice().starts_with(key));
 
         (start..end).collect()
     }

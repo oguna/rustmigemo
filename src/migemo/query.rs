@@ -1,11 +1,11 @@
 use super::character_converter::*;
 use super::compact_dictionary::*;
 use super::regex_generator::*;
-use super::ternary_regex_generator::*;
 use super::romaji_processor::RomajiProcessor;
+use super::ternary_regex_generator::*;
+use std::char::{REPLACEMENT_CHARACTER, decode_utf16};
 use std::iter::Peekable;
 use std::str::CharIndices;
-use std::char::{decode_utf16, REPLACEMENT_CHARACTER};
 use std::sync::OnceLock;
 
 fn romaji_processor() -> &'static RomajiProcessor {
@@ -18,14 +18,14 @@ pub fn query_a_word(word: &str, dict: &CompactDictionary, operator: &RegexOperat
 }
 
 pub fn query_a_word_with_generator<T: RegexGeneratorTrait>(
-    word: &str, 
-    dict: &CompactDictionary, 
+    word: &str,
+    dict: &CompactDictionary,
     operator: &RegexOperator,
-    generator: &mut T
+    generator: &mut T,
 ) -> String {
     let word_chars: Vec<char> = word.chars().collect();
     generator.add(&word_chars);
-    
+
     let lower: Vec<u16> = word.to_lowercase().encode_utf16().collect();
     for elem in dict.predictive_search(&lower) {
         let elem_chars: Vec<char> = decode_utf16(elem.iter().cloned())
@@ -33,11 +33,11 @@ pub fn query_a_word_with_generator<T: RegexGeneratorTrait>(
             .collect();
         generator.add(&elem_chars);
     }
-    
+
     let zen_str = han2zen(word.to_string());
     let zen_chars: Vec<char> = zen_str.chars().collect();
     generator.add(&zen_chars);
-    
+
     let han_str = zen2han(word.to_string());
     let han_chars: Vec<char> = han_str.chars().collect();
     generator.add(&han_chars);
@@ -50,18 +50,18 @@ pub fn query_a_word_with_generator<T: RegexGeneratorTrait>(
             .map(|r| r.unwrap_or(REPLACEMENT_CHARACTER))
             .collect();
         generator.add(&hira_chars);
-        
+
         for elem in dict.predictive_search(&hira) {
             let elem_chars: Vec<char> = decode_utf16(elem.iter().cloned())
                 .map(|r| r.unwrap_or(REPLACEMENT_CHARACTER))
                 .collect();
             generator.add(&elem_chars);
         }
-        
+
         let kata = hira2kata(&String::from_utf16_lossy(&hira));
         let kata_chars: Vec<char> = kata.chars().collect();
         generator.add(&kata_chars);
-        
+
         let zen_kata = zen2han(kata);
         let zen_kata_chars: Vec<char> = zen_kata.chars().collect();
         generator.add(&zen_kata_chars);
@@ -176,10 +176,7 @@ mod tests {
     fn test_tokenize() {
         let query = "toukyouOosaka nagoyaFUKUOKAhokkaido ";
         let tokens: Vec<&str> = tokenize(query).collect();
-        assert_eq!(
-            tokens,
-            vec!["toukyou", "Oosaka", "nagoya", "FUKUOKA", "hokkaido"]
-        );
+        assert_eq!(tokens, vec!["toukyou", "Oosaka", "nagoya", "FUKUOKA", "hokkaido"]);
     }
     #[test]
     fn test_tokenize_1() {
