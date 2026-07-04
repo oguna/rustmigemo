@@ -26,4 +26,4 @@ pico-args = { version = "0.5", optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
 
 [dev-dependencies]
-rand = "0.10.0"
+rand = "0.10.2"
