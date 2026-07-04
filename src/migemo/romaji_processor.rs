@@ -167,6 +167,12 @@ impl RomajiProcessor {
                         set.insert(value_buffer.clone());
                     }
                 }
+                // Also include the raw remaining input as a suffix option.
+                // This ensures that e.g. querying "infurawbs" against "インフラWBS" works:
+                // the trailing "s" (a romaji prefix for sa/si/su/…) must also match as the
+                // plain ASCII character 's', otherwise the generated pattern only contains
+                // kana alternatives like [サシスセソ…] and misses the ASCII 'S'.
+                set.insert(query.to_vec());
                 return RomajiPredictiveResult {
                     prefix: hiragana,
                     suffixes: set.into_iter().collect(),
@@ -398,7 +404,9 @@ mod tests {
     #[test]
     fn romaji_to_hiragana_predictively_2() {
         let (prefix, suffixes) = romaji_to_hiragana_predictively("ky");
-        let mut expected_suffixes = vec!["きゃ", "きぃ", "きぇ", "きゅ", "きょ"];
+        // "ky" itself is included as a raw-ASCII suffix so callers can also generate
+        // a literal "ky" pattern alongside the kana alternatives.
+        let mut expected_suffixes = vec!["ky", "きゃ", "きぃ", "きぇ", "きゅ", "きょ"];
         expected_suffixes.sort();
         assert_eq!(prefix, "");
         assert_eq!(suffixes, expected_suffixes);
@@ -407,7 +415,8 @@ mod tests {
     #[test]
     fn romaji_to_hiragana_predictively_3() {
         let (prefix, suffixes) = romaji_to_hiragana_predictively("kky");
-        let mut expected_suffixes = vec!["きゃ", "きぃ", "きぇ", "きゅ", "きょ"];
+        // "ky" is included as a raw-ASCII suffix (same reason as test 2).
+        let mut expected_suffixes = vec!["ky", "きゃ", "きぃ", "きぇ", "きゅ", "きょ"];
         expected_suffixes.sort();
         assert_eq!(prefix, "っ");
         assert_eq!(suffixes, expected_suffixes);
@@ -416,8 +425,9 @@ mod tests {
     #[test]
     fn romaji_to_hiragana_predictively_4() {
         let (prefix, suffixes) = romaji_to_hiragana_predictively("n");
+        // "n" itself is included as a raw-ASCII suffix alongside kana alternatives.
         let mut expected_suffixes = vec![
-            "にょ", "の", "にゃ", "ぬ", "ね", "な", "にぇ", "にゅ", "に", "ん", "にぃ",
+            "n", "にょ", "の", "にゃ", "ぬ", "ね", "な", "にぇ", "にゅ", "に", "ん", "にぃ",
         ];
         expected_suffixes.sort();
         assert_eq!(prefix, "");
@@ -434,5 +444,44 @@ mod tests {
     #[test]
     fn romaji_to_hiragana_predictively_w() {
         let (_, _) = romaji_to_hiragana_predictively("w");
+    }
+
+    // --- regression: trailing romaji consonant must include the raw ASCII suffix ---
+    //
+    // When a query like "infurawbs" is processed, the trailing "s" is an incomplete
+    // romaji syllable (prefix of sa/si/su/…).  Before the fix, the suffix set only
+    // contained kana alternatives ([さしすせそ…]) and never the plain ASCII "s", so
+    // the query could not match a filename like "インフラWBS".
+    //
+    // After the fix the raw remaining input ("s") is added as one extra suffix, which
+    // lets query_a_word generate the pattern "インフラwbs" (matched case-insensitively).
+
+    #[test]
+    fn predictive_suffix_includes_raw_ascii_trailing_consonant() {
+        // "infurawbs": after consuming "infura"→"いんふら", remaining is "wbs".
+        // "w" and "b" pass through as-is; "s" triggers suffix generation.
+        // The suffix set must contain the raw "s" so that "インフラwbs" is generated.
+        let (prefix, suffixes) = romaji_to_hiragana_predictively("infurawbs");
+        assert_eq!(prefix, "いんふらwb");
+        assert!(
+            suffixes.iter().any(|s| s == "s"),
+            "expected raw 's' in suffixes, got: {:?}",
+            suffixes
+        );
+        // kana alternatives must still be present
+        assert!(suffixes.iter().any(|s| s == "す" || s == "さ" || s == "せ"));
+    }
+
+    #[test]
+    fn predictive_suffix_includes_raw_for_single_trailing_consonant() {
+        // "denks": after "でん", remaining "k" is consumed as prefix then "s" triggers.
+        // Simpler case: just "s" alone as the remaining.
+        let (prefix, suffixes) = romaji_to_hiragana_predictively("s");
+        assert_eq!(prefix, "");
+        assert!(
+            suffixes.iter().any(|s| s == "s"),
+            "expected raw 's' in suffixes, got: {:?}",
+            suffixes
+        );
     }
 }
