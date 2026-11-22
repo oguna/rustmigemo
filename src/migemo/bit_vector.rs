@@ -27,17 +27,28 @@ pub struct BitVector {
     size_in_bits: usize,
     lb: Vec<u32>,
     sb: Vec<u16>,
+    ones: usize,
 }
 
 impl BitVector {
-    pub fn new(words: Vec<u64>, size_in_bits: usize) -> BitVector {
+    pub fn new(mut words: Vec<u64>, size_in_bits: usize) -> BitVector {
+        let expected_words = size_in_bits.div_ceil(64);
         assert!(
-            (size_in_bits + 63) / 64 == words.len(),
+            expected_words == words.len(),
             "Word vector length does not match the size in bits. Expected {}, got {}.",
-            (size_in_bits + 63) / 64,
+            expected_words,
             words.len()
         );
-        let mut lb: Vec<u32> = vec![0; (size_in_bits + 511) / 512];
+        // Clear padding bits past `size_in_bits` so that untrusted input cannot make
+        // `rank`/`count`/`next_clear_bit` disagree with the logical size.
+        if size_in_bits % 64 != 0 {
+            if let Some(last) = words.last_mut() {
+                *last &= (1u64 << (size_in_bits % 64)) - 1;
+            }
+        }
+        // One extra large block so that `rank(size_in_bits)` stays in bounds even when
+        // `size_in_bits` is a multiple of 512 (or 64).
+        let mut lb: Vec<u32> = vec![0; size_in_bits / 512 + 1];
         let mut sb: Vec<u16> = vec![0; lb.len() * 8];
         let mut sum: u32 = 0;
         let mut sum_in_lb: u32 = 0;
@@ -51,18 +62,21 @@ impl BitVector {
                 sum_in_lb = 0;
             }
         }
+        let ones = sum as usize;
         BitVector {
             words: words,
             size_in_bits: size_in_bits,
             lb: lb,
             sb: sb,
+            ones,
         }
     }
 
     pub fn rank(&self, pos: usize, b: bool) -> usize {
         assert!(pos <= self.size_in_bits, "pos is out of bounds for rank");
         let mut count1 = self.sb[(pos / 64) as usize] as usize + self.lb[(pos / 512) as usize] as usize;
-        let word = self.words[(pos / 64) as usize];
+        // `pos == size_in_bits` may point one word past the end; the mask is 0 there anyway.
+        let word = self.words.get(pos / 64).copied().unwrap_or(0);
         let shift_size = 64 - (pos & 63);
         let mask = if shift_size == 64 {
             0
@@ -75,6 +89,14 @@ impl BitVector {
 
     pub fn select(&self, count: usize, b: bool) -> usize {
         assert!(count > 0, "select() requires a 1-indexed count, but got 0.");
+        // Without this check the BMI2 path silently returns a bogus position.
+        assert!(
+            count <= self.count(b),
+            "select() count {} exceeds the number of {} bits ({})",
+            count,
+            b,
+            self.count(b)
+        );
         let lb_index = self.lower_bound_binary_search_lb(count as u32, b) - 1;
         let count_in_lb: usize = if b {
             count - self.lb[lb_index as usize] as usize
@@ -222,6 +244,11 @@ impl BitVector {
             }
             word = !self.words[u];
         }
+    }
+
+    /// Number of bits equal to `b` in the whole vector.
+    pub fn count(&self, b: bool) -> usize {
+        if b { self.ones } else { self.size_in_bits - self.ones }
     }
 
     pub fn size(&self) -> usize {
@@ -387,6 +414,33 @@ mod tests {
                 assert_eq!(pdep_pos, BitVector::select_in_word(word, count));
             }
         }
+    }
+
+    #[test]
+    fn test_rank_at_end_of_vector() {
+        // Regression: rank(size) used to index past the end when size % 64 == 0.
+        for size in [0usize, 1, 63, 64, 65, 511, 512, 513, 1024] {
+            let words = vec![u64::MAX; (size + 63) / 64];
+            let bv = BitVector::new(words, size);
+            assert_eq!(bv.rank(size, true), size);
+            assert_eq!(bv.rank(size, false), 0);
+            assert_eq!(bv.count(true), size);
+        }
+    }
+
+    #[test]
+    fn test_padding_bits_are_ignored() {
+        let bv = BitVector::new(vec![u64::MAX], 4);
+        assert_eq!(bv.count(true), 4);
+        assert_eq!(bv.count(false), 0);
+        assert_eq!(bv.next_clear_bit(0), 4);
+    }
+
+    #[test]
+    #[should_panic(expected = "exceeds the number of")]
+    fn test_select_past_end_panics() {
+        let bv = BitVector::new(vec![0b1011], 4);
+        bv.select(4, true);
     }
 
     #[test]

@@ -18,8 +18,8 @@ impl<'a> Iterator for LoudsTriePredictiveSearchIter<'a> {
         } else if self.upper == self.lower {
             return None;
         } else {
-            let lower_select = self.trie.bit_vector.select(self.lower, false);
-            let upper_select = self.trie.bit_vector.select(self.upper, false);
+            let lower_select = self.trie.node_block_start(self.lower);
+            let upper_select = self.trie.node_block_start(self.upper);
 
             if lower_select + 1 <= self.trie.bit_vector.size() {
                 self.lower = self.trie.bit_vector.rank(lower_select + 1, true) + 1;
@@ -122,7 +122,8 @@ impl LoudsTrie {
 
     pub fn first_child(&self, x: usize) -> Option<usize> {
         let y = self.bit_vector.select(x, false) + 1;
-        if self.bit_vector.get(y) {
+        // The last node's block may end exactly at the end of the bit vector.
+        if y < self.bit_vector.size() && self.bit_vector.get(y) {
             return Some(self.bit_vector.rank(y, true) + 1);
         } else {
             return None;
@@ -183,6 +184,48 @@ impl LoudsTrie {
 
     pub fn size(&self) -> usize {
         return self.edges.len() - 2;
+    }
+
+    /// Position of the 0-bit that starts node `x`'s child block, or the end of the
+    /// bit vector for the virtual node one past the last one.
+    fn node_block_start(&self, x: usize) -> usize {
+        if x <= self.bit_vector.count(false) {
+            self.bit_vector.select(x, false)
+        } else {
+            self.bit_vector.size()
+        }
+    }
+
+    /// Checks the structural invariants that the lookup methods rely on, so that a
+    /// trie read from untrusted bytes cannot cause panics or infinite loops later.
+    pub fn validate(&self) -> Result<(), &'static str> {
+        let nodes = self.edges.len();
+        if nodes < 2 {
+            return Err("trie has no root node");
+        }
+        // Node ids are 1..nodes; node k (k >= 1) is described by the k-th 1-bit.
+        if self.bit_vector.count(true) != nodes - 1 {
+            return Err("trie bit vector 1-bit count does not match edge count");
+        }
+        if self.bit_vector.count(false) < nodes - 1 {
+            return Err("trie bit vector has fewer 0-bits than nodes");
+        }
+        // parent(k) = number of 0-bits before the k-th 1-bit. Bit 0 must be 1 (super-root),
+        // and for k >= 2 parent(k) must be a real node that precedes k (BFS order),
+        // otherwise get_key() or predictive_search() could loop forever.
+        let mut ones = 0usize;
+        let mut zeros = 0usize;
+        for pos in 0..self.bit_vector.size() {
+            if self.bit_vector.get(pos) {
+                ones += 1;
+                if (ones == 1 && zeros != 0) || (ones >= 2 && (zeros == 0 || zeros >= ones)) {
+                    return Err("trie node has an invalid parent");
+                }
+            } else {
+                zeros += 1;
+            }
+        }
+        Ok(())
     }
 
     pub fn build(keys: &Vec<Vec<u16>>) -> (LoudsTrie, Vec<u32>) {
@@ -280,6 +323,43 @@ mod tests {
                 32, 32, 98, 100, 97, 111, 97, 98, 100, 110, 120, 100, 110, 121, 107, 99, 101
             ]
         );
+    }
+
+    #[test]
+    fn test_traverse_past_last_node() {
+        // Regression: walking below the last BFS node read past the end of the bit vector.
+        let words: Vec<Vec<u16>> = vec!["baby", "bad", "bank", "box", "dad", "dance"]
+            .iter()
+            .map(|x| x.encode_utf16().collect())
+            .collect();
+        let (trie, _) = LoudsTrie::build(&words);
+        trie.validate().unwrap();
+        let dance: Vec<u16> = "dance".encode_utf16().collect();
+        let dancex: Vec<u16> = "dancex".encode_utf16().collect();
+        let node = trie.get(&dance).unwrap();
+        assert_eq!(node, trie.edges.len() - 1);
+        assert_eq!(trie.get(&dancex), None);
+        assert_eq!(trie.predictive_search(node).collect::<Vec<_>>(), vec![node]);
+    }
+
+    #[test]
+    fn test_validate_rejects_parent_cycle() {
+        // edges: dummy, root, 'a', 'b'; bits claim node 2 is a child of node 3.
+        let trie = LoudsTrie {
+            bit_vector: BitVector::new(vec![0b1_1001], 6),
+            edges: vec![0x20, 0x20, 97, 98],
+        };
+        assert!(trie.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_rejects_leading_zero() {
+        // Leading 0-bit makes root node 1 its own parent/child, causing predictive_search(1) to loop.
+        let trie = LoudsTrie {
+            bit_vector: BitVector::new(vec![0b0110], 4),
+            edges: vec![0x20, 97, 98],
+        };
+        assert!(trie.validate().is_err());
     }
 
     #[test]
