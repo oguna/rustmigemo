@@ -6,6 +6,7 @@ use std::io::Cursor;
 
 /// Error returned when a dictionary buffer is truncated or structurally invalid.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DictionaryError {
     /// The buffer ended before the field `field` could be read.
     UnexpectedEof { field: &'static str },
@@ -65,12 +66,13 @@ impl<'a> Reader<'a> {
     fn bit_vector(&mut self, field: &'static str) -> Result<BitVector, DictionaryError> {
         let size_in_bits = self.u32(field)? as usize;
         let num_words = size_in_bits.div_ceil(64);
-        let bytes = self.take(num_words.checked_mul(8).unwrap(), field)?;
+        let needed = num_words
+            .checked_mul(8)
+            .ok_or(DictionaryError::UnexpectedEof { field })?;
+        let bytes = self.take(needed, field)?;
         let words = bytes
-            .as_chunks::<8>()
-            .0
-            .iter()
-            .map(|c| u64::from_be_bytes(*c))
+            .chunks_exact(8)
+            .map(|c| u64::from_be_bytes(c.try_into().unwrap()))
             .collect();
         Ok(BitVector::new(words, size_in_bits))
     }
@@ -85,10 +87,8 @@ impl<'a> Reader<'a> {
         } else {
             let n = self.count(2, "value trie edges")?;
             self.take(n * 2, "value trie edges")?
-                .as_chunks::<2>()
-                .0
-                .iter()
-                .map(|c| u16::from_be_bytes(*c))
+                .chunks_exact(2)
+                .map(|c| u16::from_be_bytes(c.try_into().unwrap()))
                 .collect()
         };
         let bit_vector = self.bit_vector("trie bit vector")?;
@@ -198,11 +198,13 @@ impl CompactDictionary {
         let mapping_size = reader.count(4, "mapping")?;
         let mapping: Vec<u32> = reader
             .take(mapping_size * 4, "mapping")?
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .map(|c| u32::from_be_bytes(*c))
+            .chunks_exact(4)
+            .map(|c| u32::from_be_bytes(c.try_into().unwrap()))
             .collect();
+
+        if mapping_bit_vector.size() > 0 && mapping_bit_vector.get(0) {
+            return Err(DictionaryError::Invalid("mapping bit vector must start with 0"));
+        }
 
         // Each 1-bit of the mapping bit vector refers to one mapping entry, and every
         // reachable mapping entry must name an existing value node. (Dictionaries in the
@@ -381,6 +383,34 @@ mod tests {
         }
         let key: Vec<u16> = "わかやまけん".encode_utf16().collect();
         let _ = dict.search(&key).count();
+    }
+
+    #[test]
+    fn try_new_rejects_mapping_starting_with_one() {
+        // Minimal valid key/value tries (root only: edges=[0x20, 0x20], bits=0b01 len=2),
+        // followed by a mapping_bit_vector whose bit 0 is 1 (0b01, len=2) and 1 mapping entry.
+        let mut buf = Vec::new();
+        // key trie: 2 edges (u8) + 2-bit bit vector (0b01)
+        buf.extend_from_slice(&2u32.to_be_bytes());
+        buf.extend_from_slice(&[0x20, 0x20]);
+        buf.extend_from_slice(&2u32.to_be_bytes());
+        buf.extend_from_slice(&0b01u64.to_be_bytes());
+        // value trie: 2 edges (u16) + 2-bit bit vector (0b01)
+        buf.extend_from_slice(&2u32.to_be_bytes());
+        buf.extend_from_slice(&[0x00, 0x20, 0x00, 0x20]);
+        buf.extend_from_slice(&2u32.to_be_bytes());
+        buf.extend_from_slice(&0b01u64.to_be_bytes());
+        // mapping bit vector starting with 1: 0b01 (bit 0 = 1, bit 1 = 0)
+        buf.extend_from_slice(&2u32.to_be_bytes());
+        buf.extend_from_slice(&0b01u64.to_be_bytes());
+        // 1 valid mapping entry pointing to value node 1
+        buf.extend_from_slice(&1u32.to_be_bytes());
+        buf.extend_from_slice(&1u32.to_be_bytes());
+
+        assert_eq!(
+            CompactDictionary::try_new(&buf).unwrap_err(),
+            DictionaryError::Invalid("mapping bit vector must start with 0")
+        );
     }
 
     #[test]

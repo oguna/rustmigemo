@@ -210,14 +210,15 @@ impl LoudsTrie {
         if self.bit_vector.count(false) < nodes - 1 {
             return Err("trie bit vector has fewer 0-bits than nodes");
         }
-        // parent(k) = number of 0-bits before the k-th 1-bit. It must be a real node
-        // that precedes k (BFS order), otherwise get_key() could loop forever.
+        // parent(k) = number of 0-bits before the k-th 1-bit. Bit 0 must be 1 (super-root),
+        // and for k >= 2 parent(k) must be a real node that precedes k (BFS order),
+        // otherwise get_key() or predictive_search() could loop forever.
         let mut ones = 0usize;
         let mut zeros = 0usize;
         for pos in 0..self.bit_vector.size() {
             if self.bit_vector.get(pos) {
                 ones += 1;
-                if ones >= 2 && (zeros == 0 || zeros >= ones) {
+                if (ones == 1 && zeros != 0) || (ones >= 2 && (zeros == 0 || zeros >= ones)) {
                     return Err("trie node has an invalid parent");
                 }
             } else {
@@ -347,6 +348,16 @@ mod tests {
         let trie = LoudsTrie {
             bit_vector: BitVector::new(vec![0b1_1001], 6),
             edges: vec![0x20, 0x20, 97, 98],
+        };
+        assert!(trie.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_rejects_leading_zero() {
+        // Leading 0-bit makes root node 1 its own parent/child, causing predictive_search(1) to loop.
+        let trie = LoudsTrie {
+            bit_vector: BitVector::new(vec![0b0110], 4),
+            edges: vec![0x20, 97, 98],
         };
         assert!(trie.validate().is_err());
     }

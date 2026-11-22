@@ -32,14 +32,13 @@ pub struct BitVector {
 
 impl BitVector {
     pub fn new(mut words: Vec<u64>, size_in_bits: usize) -> BitVector {
+        let expected_words = size_in_bits.div_ceil(64);
         assert!(
-            (size_in_bits + 63) / 64 == words.len(),
+            expected_words == words.len(),
             "Word vector length does not match the size in bits. Expected {}, got {}.",
-            (size_in_bits + 63) / 64,
+            expected_words,
             words.len()
         );
-        // One extra large block so that `rank(size_in_bits)` stays in bounds even when
-        // `size_in_bits` is a multiple of 512 (or 64).
         // Clear padding bits past `size_in_bits` so that untrusted input cannot make
         // `rank`/`count`/`next_clear_bit` disagree with the logical size.
         if size_in_bits % 64 != 0 {
@@ -47,6 +46,8 @@ impl BitVector {
                 *last &= (1u64 << (size_in_bits % 64)) - 1;
             }
         }
+        // One extra large block so that `rank(size_in_bits)` stays in bounds even when
+        // `size_in_bits` is a multiple of 512 (or 64).
         let mut lb: Vec<u32> = vec![0; size_in_bits / 512 + 1];
         let mut sb: Vec<u16> = vec![0; lb.len() * 8];
         let mut sum: u32 = 0;
@@ -61,7 +62,7 @@ impl BitVector {
                 sum_in_lb = 0;
             }
         }
-        let ones = words.iter().map(|w| w.count_ones() as usize).sum();
+        let ones = sum as usize;
         BitVector {
             words: words,
             size_in_bits: size_in_bits,

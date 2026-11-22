@@ -50,14 +50,16 @@ mod windows_exports {
         result_len: u32,
     }
 
-    /// Builds a byte slice from a C pointer/length pair, treating NULL as empty.
+    /// Builds a byte slice from a C pointer/length pair, returning `None` if
+    /// `buffer` is NULL when `len > 0`, or if `len` exceeds `isize::MAX`.
     unsafe fn bytes<'a>(buffer: *const u8, len: u32) -> Option<&'a [u8]> {
+        let len = usize::try_from(len).ok()?;
         if len == 0 {
             Some(&[])
-        } else if buffer.is_null() {
+        } else if buffer.is_null() || len > isize::MAX as usize {
             None
         } else {
-            Some(unsafe { std::slice::from_raw_parts(buffer, len as usize) })
+            Some(unsafe { std::slice::from_raw_parts(buffer, len) })
         }
     }
 
@@ -72,6 +74,11 @@ mod windows_exports {
 
     /// Loads a dictionary. On failure (NULL buffer or malformed data) the returned
     /// handle has a NULL `dict`, and `query` on it returns `false`.
+    ///
+    /// # Safety
+    ///
+    /// When `len > 0`, `buffer` must be valid for reads of `len` bytes for the
+    /// duration of this call (or NULL, in which case loading fails safely).
     #[unsafe(no_mangle)]
     pub unsafe extern "C" fn load(buffer: *const u8, len: u32) -> Migemo {
         let dict = unsafe { bytes(buffer, len) }
@@ -86,6 +93,12 @@ mod windows_exports {
 
     /// Runs a query. Returns `false` on error (NULL arguments, no dictionary, or a
     /// query containing NUL); `result_ptr` is then an empty string, never dangling.
+    ///
+    /// # Safety
+    ///
+    /// `migemo` must be NULL or a valid pointer to a [`Migemo`] returned by [`load`]
+    /// that has not been destroyed. When `len > 0`, `buffer` must be NULL or valid
+    /// for reads of `len` bytes.
     #[unsafe(no_mangle)]
     pub unsafe extern "C" fn query(migemo: *mut Migemo, buffer: *const u8, len: u32) -> bool {
         let Some(migemo) = (unsafe { migemo.as_mut() }) else {
@@ -105,6 +118,12 @@ mod windows_exports {
         ok
     }
 
+    /// Frees the dictionary and last query result owned by `migemo`.
+    ///
+    /// # Safety
+    ///
+    /// `migemo` must be NULL or a valid pointer to a [`Migemo`] returned by [`load`].
+    /// Calling `destroy` more than once on the same handle is safe.
     #[unsafe(no_mangle)]
     pub unsafe extern "C" fn destroy(migemo: *mut Migemo) {
         let Some(migemo) = (unsafe { migemo.as_mut() }) else {
