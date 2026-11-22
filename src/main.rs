@@ -1,8 +1,6 @@
 extern crate rustmigemo;
 use std::env;
-use std::fs::File;
 use std::io;
-use std::io::Read;
 use std::io::Write;
 
 use pico_args::Arguments;
@@ -66,11 +64,20 @@ fn main() {
     };
 
     // 辞書ファイルを読み込み
-    let mut f = File::open(&dictfile).expect("Fail to load dict file");
-    let mut buf = Vec::new();
-    let _ = f.read_to_end(&mut buf);
-    drop(f);
-    let dict = CompactDictionary::new(&buf);
+    let buf = match std::fs::read(&dictfile) {
+        Ok(buf) => buf,
+        Err(e) => {
+            eprintln!("Error: failed to read dictionary file '{}': {}", dictfile, e);
+            std::process::exit(1);
+        }
+    };
+    let dict = match CompactDictionary::try_new(&buf) {
+        Ok(dict) => dict,
+        Err(e) => {
+            eprintln!("Error: '{}': {}", dictfile, e);
+            std::process::exit(1);
+        }
+    };
 
     // --word オプションが指定されている場合
     if let Some(w) = word {

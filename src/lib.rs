@@ -14,12 +14,11 @@ mod wasm_exports {
 
     #[wasm_bindgen]
     impl Migemo {
+        /// Throws a JavaScript `Error` if the dictionary data is malformed.
         #[wasm_bindgen(constructor)]
-        pub fn new(buffer: &[u8]) -> Migemo {
-            let vec = Vec::from(buffer);
-            Migemo {
-                dictionary: CompactDictionary::new(&vec),
-            }
+        pub fn new(buffer: &[u8]) -> Result<Migemo, JsError> {
+            let dictionary = CompactDictionary::try_new(buffer).map_err(|e| JsError::new(&e.to_string()))?;
+            Ok(Migemo { dictionary })
         }
 
         pub fn query(&self, word: String) -> String {
@@ -42,6 +41,7 @@ mod windows_exports {
 
     use std::ffi::CString;
     use std::os::raw::c_char;
+    use std::panic::{AssertUnwindSafe, catch_unwind};
 
     #[repr(C, align(8))]
     pub struct Migemo {
@@ -50,54 +50,118 @@ mod windows_exports {
         result_len: u32,
     }
 
-    #[unsafe(no_mangle)]
-    pub unsafe extern "C" fn load(buffer: *const u8, len: u32) -> Migemo {
-        let mut dst = Vec::with_capacity(len as usize);
-        dst.set_len(len as usize);
-        std::ptr::copy(buffer, dst.as_mut_ptr(), len as usize);
-        let dict = Box::new(CompactDictionary::new(&dst));
-        return Migemo {
-            dict: Box::into_raw(dict),
-            result_ptr: 0 as *mut c_char,
-            result_len: 0,
-        };
+    /// Builds a byte slice from a C pointer/length pair, treating NULL as empty.
+    unsafe fn bytes<'a>(buffer: *const u8, len: u32) -> Option<&'a [u8]> {
+        if len == 0 {
+            Some(&[])
+        } else if buffer.is_null() {
+            None
+        } else {
+            Some(unsafe { std::slice::from_raw_parts(buffer, len as usize) })
+        }
     }
 
+    /// Frees the previous result and stores `result` (always a valid C string).
+    unsafe fn set_result(migemo: &mut Migemo, result: CString) {
+        if !migemo.result_ptr.is_null() {
+            drop(unsafe { CString::from_raw(migemo.result_ptr) });
+        }
+        migemo.result_len = result.as_bytes().len() as u32;
+        migemo.result_ptr = result.into_raw();
+    }
+
+    /// Loads a dictionary. On failure (NULL buffer or malformed data) the returned
+    /// handle has a NULL `dict`, and `query` on it returns `false`.
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn load(buffer: *const u8, len: u32) -> Migemo {
+        let dict = unsafe { bytes(buffer, len) }
+            .and_then(|data| catch_unwind(|| CompactDictionary::try_new(data).ok()).ok().flatten())
+            .map_or(std::ptr::null_mut(), |d| Box::into_raw(Box::new(d)));
+        Migemo {
+            dict,
+            result_ptr: std::ptr::null_mut(),
+            result_len: 0,
+        }
+    }
+
+    /// Runs a query. Returns `false` on error (NULL arguments, no dictionary, or a
+    /// query containing NUL); `result_ptr` is then an empty string, never dangling.
     #[unsafe(no_mangle)]
     pub unsafe extern "C" fn query(migemo: *mut Migemo, buffer: *const u8, len: u32) -> bool {
-        if !(*migemo).result_ptr.is_null() {
-            let _ = CString::from_raw((*migemo).result_ptr);
-            (*migemo).result_ptr = std::ptr::null_mut();
-            (*migemo).result_len = 0;
-        }
-
-        let mut dst = Vec::with_capacity(len as usize);
-        dst.set_len(len as usize);
-        std::ptr::copy(buffer, dst.as_mut_ptr(), len as usize);
-        let string = String::from_utf8_lossy(&dst);
-
-        let dict = &*(*migemo).dict;
-        let rxop = RegexOperator::Default;
-        // 別名を付けた`migemo_query`関数を呼び出します
-        let result = migemo_query(string.to_string(), dict, &rxop);
-
-        let c_string = CString::new(result).unwrap();
-        (*migemo).result_len = c_string.as_bytes().len() as u32;
-        (*migemo).result_ptr = c_string.into_raw();
-
-        return true;
+        let Some(migemo) = (unsafe { migemo.as_mut() }) else {
+            return false;
+        };
+        let result = (|| {
+            let dict = unsafe { migemo.dict.as_ref() }?;
+            let input = unsafe { bytes(buffer, len) }?;
+            let string = String::from_utf8_lossy(input).into_owned();
+            // Never unwind across the FFI boundary: that aborts the host process.
+            let pattern =
+                catch_unwind(AssertUnwindSafe(|| migemo_query(string, dict, &RegexOperator::Default))).ok()?;
+            CString::new(pattern).ok()
+        })();
+        let ok = result.is_some();
+        unsafe { set_result(migemo, result.unwrap_or_default()) };
+        ok
     }
 
     #[unsafe(no_mangle)]
     pub unsafe extern "C" fn destroy(migemo: *mut Migemo) {
-        if !(*migemo).result_ptr.is_null() {
-            let _ = CString::from_raw((*migemo).result_ptr);
-            (*migemo).result_ptr = std::ptr::null_mut();
-            (*migemo).result_len = 0;
+        let Some(migemo) = (unsafe { migemo.as_mut() }) else {
+            return;
+        };
+        if !migemo.result_ptr.is_null() {
+            drop(unsafe { CString::from_raw(migemo.result_ptr) });
+            migemo.result_ptr = std::ptr::null_mut();
+            migemo.result_len = 0;
         }
-        if !(*migemo).dict.is_null() {
-            let _ = Box::from_raw((*migemo).dict);
-            (*migemo).dict = std::ptr::null_mut();
+        if !migemo.dict.is_null() {
+            drop(unsafe { Box::from_raw(migemo.dict) });
+            migemo.dict = std::ptr::null_mut();
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::ffi::CStr;
+
+        fn result(m: &Migemo) -> String {
+            unsafe { CStr::from_ptr(m.result_ptr) }.to_str().unwrap().to_string()
+        }
+
+        #[test]
+        fn query_and_destroy() {
+            let data = std::fs::read("todofuken").unwrap();
+            let mut m = unsafe { load(data.as_ptr(), data.len() as u32) };
+            assert!(!m.dict.is_null());
+            let q = b"oosaka";
+            assert!(unsafe { query(&mut m, q.as_ptr(), q.len() as u32) });
+            assert!(result(&m).contains("大阪府"));
+            assert_eq!(m.result_len as usize, result(&m).len());
+            unsafe { destroy(&mut m) };
+            unsafe { destroy(&mut m) }; // idempotent
+        }
+
+        #[test]
+        fn invalid_inputs_do_not_crash() {
+            let mut bad = unsafe { load([0x7f, 0xff, 0xff, 0xff].as_ptr(), 4) };
+            assert!(bad.dict.is_null());
+            assert!(!unsafe { query(&mut bad, b"a".as_ptr(), 1) });
+            assert_eq!(result(&bad), "");
+            unsafe { destroy(&mut bad) };
+
+            let null = unsafe { load(std::ptr::null(), 10) };
+            assert!(null.dict.is_null());
+            assert!(!unsafe { query(std::ptr::null_mut(), b"a".as_ptr(), 1) });
+            unsafe { destroy(std::ptr::null_mut()) };
+
+            let data = std::fs::read("todofuken").unwrap();
+            let mut m = unsafe { load(data.as_ptr(), data.len() as u32) };
+            assert!(!unsafe { query(&mut m, b"a\0b".as_ptr(), 3) });
+            assert_eq!(result(&m), "");
+            assert!(!unsafe { query(&mut m, std::ptr::null(), 5) });
+            unsafe { destroy(&mut m) };
         }
     }
 }

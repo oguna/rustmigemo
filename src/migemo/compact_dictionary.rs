@@ -1,8 +1,102 @@
 use super::bit_list::BitList;
 use super::bit_vector::BitVector;
 use super::louds_trie::LoudsTrie;
-use byteorder::{BigEndian, ReadBytesExt};
+use std::fmt;
 use std::io::Cursor;
+
+/// Error returned when a dictionary buffer is truncated or structurally invalid.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DictionaryError {
+    /// The buffer ended before the field `field` could be read.
+    UnexpectedEof { field: &'static str },
+    /// The buffer was read completely but its contents are inconsistent.
+    Invalid(&'static str),
+}
+
+impl fmt::Display for DictionaryError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DictionaryError::UnexpectedEof { field } => {
+                write!(f, "invalid dictionary: unexpected end of data while reading {}", field)
+            }
+            DictionaryError::Invalid(reason) => write!(f, "invalid dictionary: {}", reason),
+        }
+    }
+}
+
+impl std::error::Error for DictionaryError {}
+
+/// Bounds-checked big-endian reader. Every length prefix is checked against the
+/// remaining input *before* allocating, so a malicious header cannot trigger a
+/// multi-gigabyte allocation.
+struct Reader<'a> {
+    buf: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> Reader<'a> {
+    fn take(&mut self, n: usize, field: &'static str) -> Result<&'a [u8], DictionaryError> {
+        let end = self
+            .pos
+            .checked_add(n)
+            .filter(|&end| end <= self.buf.len())
+            .ok_or(DictionaryError::UnexpectedEof { field })?;
+        let bytes = &self.buf[self.pos..end];
+        self.pos = end;
+        Ok(bytes)
+    }
+
+    fn u32(&mut self, field: &'static str) -> Result<u32, DictionaryError> {
+        Ok(u32::from_be_bytes(self.take(4, field)?.try_into().unwrap()))
+    }
+
+    /// Reads a `u32` element count and checks that `count * elem_size` bytes remain.
+    fn count(&mut self, elem_size: usize, field: &'static str) -> Result<usize, DictionaryError> {
+        let count = self.u32(field)? as usize;
+        let needed = count
+            .checked_mul(elem_size)
+            .ok_or(DictionaryError::UnexpectedEof { field })?;
+        if needed > self.buf.len() - self.pos {
+            return Err(DictionaryError::UnexpectedEof { field });
+        }
+        Ok(count)
+    }
+
+    fn bit_vector(&mut self, field: &'static str) -> Result<BitVector, DictionaryError> {
+        let size_in_bits = self.u32(field)? as usize;
+        let num_words = size_in_bits.div_ceil(64);
+        let bytes = self.take(num_words.checked_mul(8).unwrap(), field)?;
+        let words = bytes
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|c| u64::from_be_bytes(*c))
+            .collect();
+        Ok(BitVector::new(words, size_in_bits))
+    }
+
+    fn trie(&mut self, compact_hiragana: bool) -> Result<LoudsTrie, DictionaryError> {
+        let edges: Vec<u16> = if compact_hiragana {
+            let n = self.count(1, "key trie edges")?;
+            self.take(n, "key trie edges")?
+                .iter()
+                .map(|&b| CompactDictionary::decode(b))
+                .collect()
+        } else {
+            let n = self.count(2, "value trie edges")?;
+            self.take(n * 2, "value trie edges")?
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|c| u16::from_be_bytes(*c))
+                .collect()
+        };
+        let bit_vector = self.bit_vector("trie bit vector")?;
+        let trie = LoudsTrie { bit_vector, edges };
+        trie.validate().map_err(DictionaryError::Invalid)?;
+        Ok(trie)
+    }
+}
 
 #[derive(Debug)]
 pub struct CompactDictionary {
@@ -63,7 +157,7 @@ impl<'a> Iterator for PredictiveSearchIter<'a> {
 
             let dict = self.dict;
             let next_values = self.key_node_indices.find_map(|node_index| {
-                if node_index < dict.has_mapping_bit_list.len() && dict.has_mapping_bit_list.get(node_index) {
+                if dict.has_mapping(node_index) {
                     let value_start_pos = dict.mapping_bit_vector.select(node_index, false);
                     let value_end_pos = dict.mapping_bit_vector.next_clear_bit(value_start_pos + 1);
                     let size = value_end_pos - value_start_pos - 1;
@@ -88,53 +182,64 @@ impl<'a> Iterator for PredictiveSearchIter<'a> {
 }
 
 impl CompactDictionary {
+    /// Parses a dictionary, panicking if the data is malformed.
+    ///
+    /// Prefer [`CompactDictionary::try_new`] when the data comes from an untrusted source.
     pub fn new(buffer: &Vec<u8>) -> CompactDictionary {
-        let mut cursor = Cursor::new(buffer);
-        let key_trie = CompactDictionary::read_trie(&mut cursor, true);
-        let value_trie = CompactDictionary::read_trie(&mut cursor, false);
-        let mapping_bit_vector_size = cursor.read_u32::<BigEndian>().unwrap() as usize;
-        let mut mapping_bit_vector_words = vec![0; (mapping_bit_vector_size + 63) / 64];
-        for i in 0..mapping_bit_vector_words.len() {
-            mapping_bit_vector_words[i] = cursor.read_u64::<BigEndian>().unwrap();
-        }
-        let mapping_bit_vector = BitVector::new(mapping_bit_vector_words, mapping_bit_vector_size);
-        let mapping_size = cursor.read_u32::<BigEndian>().unwrap();
-        let mut mapping: Vec<u32> = vec![0; mapping_size as usize];
-        for i in 0..mapping_size {
-            mapping[i as usize] = cursor.read_u32::<BigEndian>().unwrap();
-        }
-        let has_mapping_bit_list = CompactDictionary::create_mapping_bit_list(&mapping_bit_vector);
-        return CompactDictionary {
-            key_trie: key_trie,
-            value_trie: value_trie,
-            mapping_bit_vector: mapping_bit_vector,
-            mapping: mapping,
-            has_mapping_bit_list: has_mapping_bit_list,
-        };
+        CompactDictionary::try_new(buffer).unwrap_or_else(|e| panic!("{}", e))
     }
 
+    /// Parses and validates a dictionary without panicking on malformed input.
+    pub fn try_new(buffer: &[u8]) -> Result<CompactDictionary, DictionaryError> {
+        let mut reader = Reader { buf: buffer, pos: 0 };
+        let key_trie = reader.trie(true)?;
+        let value_trie = reader.trie(false)?;
+        let mapping_bit_vector = reader.bit_vector("mapping bit vector")?;
+        let mapping_size = reader.count(4, "mapping")?;
+        let mapping: Vec<u32> = reader
+            .take(mapping_size * 4, "mapping")?
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| u32::from_be_bytes(*c))
+            .collect();
+
+        // Each 1-bit of the mapping bit vector refers to one mapping entry, and every
+        // reachable mapping entry must name an existing value node. (Dictionaries in the
+        // wild carry one trailing, unreachable entry, so `mapping` may be longer.)
+        let reachable = mapping_bit_vector.count(true);
+        if mapping.len() < reachable {
+            return Err(DictionaryError::Invalid(
+                "mapping is shorter than the mapping bit vector",
+            ));
+        }
+        if mapping[..reachable]
+            .iter()
+            .any(|&v| v == 0 || v as usize >= value_trie.edges.len())
+        {
+            return Err(DictionaryError::Invalid("mapping refers to a nonexistent value"));
+        }
+
+        let has_mapping_bit_list = CompactDictionary::create_mapping_bit_list(&mapping_bit_vector);
+        Ok(CompactDictionary {
+            key_trie,
+            value_trie,
+            mapping_bit_vector,
+            mapping,
+            has_mapping_bit_list,
+        })
+    }
+
+    /// Reads a trie from `cursor`, panicking if the data is malformed.
     pub fn read_trie(cursor: &mut Cursor<&Vec<u8>>, compact_hiragana: bool) -> LoudsTrie {
-        let key_trie_edge_size = cursor.read_u32::<BigEndian>().unwrap();
-        let mut key_trie_edges = vec![0; key_trie_edge_size as usize];
-        for i in 0..key_trie_edge_size {
-            let c: u16 = if compact_hiragana {
-                CompactDictionary::decode(cursor.read_u8().unwrap())
-            } else {
-                cursor.read_u16::<BigEndian>().unwrap()
-            };
-            key_trie_edges[i as usize] = c;
-        }
-        let key_trie_bit_vector_size = cursor.read_u32::<BigEndian>().unwrap();
-        let mut key_trie_bit_vector_words: Vec<u64> = vec![0; (key_trie_bit_vector_size as usize + 63) / 64];
-        for i in 0..key_trie_bit_vector_words.len() {
-            key_trie_bit_vector_words[i] = cursor.read_u64::<BigEndian>().unwrap();
-        }
-        let bit_vector = BitVector::new(key_trie_bit_vector_words, key_trie_bit_vector_size as usize);
-        let louds_trie = LoudsTrie {
-            bit_vector: bit_vector,
-            edges: key_trie_edges,
+        let buf: &[u8] = cursor.get_ref();
+        let mut reader = Reader {
+            buf,
+            pos: cursor.position() as usize,
         };
-        return louds_trie;
+        let trie = reader.trie(compact_hiragana).unwrap_or_else(|e| panic!("{}", e));
+        cursor.set_position(reader.pos as u64);
+        trie
     }
 
     fn create_mapping_bit_list(bit_vector: &BitVector) -> BitList {
@@ -142,11 +247,17 @@ impl CompactDictionary {
         let mut bit_list = BitList::new_with_size(num_of_nodes + 1);
         let mut bit_position = 0;
         for node in 1..=num_of_nodes {
-            let has_mapping = bit_vector.get(bit_position + 1);
+            let has_mapping = bit_position + 1 < bit_vector.size() && bit_vector.get(bit_position + 1);
             bit_list.set(node, has_mapping);
             bit_position = bit_vector.next_clear_bit(bit_position + 1)
         }
         return bit_list;
+    }
+
+    /// Whether key node `node_index` has at least one value. Nodes past the end of the
+    /// mapping bit vector (e.g. the last key node) have none.
+    fn has_mapping(&self, node_index: usize) -> bool {
+        node_index < self.has_mapping_bit_list.len() && self.has_mapping_bit_list.get(node_index)
     }
 
     fn decode(b: u8) -> u16 {
@@ -168,7 +279,7 @@ impl CompactDictionary {
     }
 
     pub fn search(&self, key: &Vec<u16>) -> SearchIter<'_> {
-        let key_index = self.key_trie.get(key);
+        let key_index = self.key_trie.get(key).filter(|&i| self.has_mapping(i));
         if key_index.is_some() {
             let key_index = key_index.unwrap();
             let value_start_pos = self.mapping_bit_vector.select(key_index as usize, false);
@@ -231,6 +342,62 @@ mod tests {
         let word: Vec<u16> = "おおさ".encode_utf16().collect();
         for s in dict.search(&word) {
             println!("{}", String::from_utf16_lossy(&s));
+        }
+    }
+
+    fn todofuken() -> Vec<u8> {
+        std::fs::read("todofuken").expect("Fail to load dict file")
+    }
+
+    #[test]
+    fn try_new_rejects_truncated_data() {
+        let buf = todofuken();
+        for len in 0..buf.len() {
+            assert!(CompactDictionary::try_new(&buf[..len]).is_err(), "len={}", len);
+        }
+        assert!(CompactDictionary::try_new(&buf).is_ok());
+    }
+
+    #[test]
+    fn try_new_does_not_allocate_from_untrusted_lengths() {
+        // A 4-byte header claiming ~2^31 edges used to abort with a 2 GiB allocation.
+        let err = CompactDictionary::try_new(&[0x7f, 0xff, 0xff, 0xff]).unwrap_err();
+        assert_eq!(
+            err,
+            DictionaryError::UnexpectedEof {
+                field: "key trie edges"
+            }
+        );
+    }
+
+    #[test]
+    fn query_on_last_trie_node_does_not_panic() {
+        // "わかやまけん" is the last node of the key trie in BFS order.
+        use crate::migemo::query::query;
+        use crate::migemo::regex_generator::RegexOperator;
+        let dict = CompactDictionary::try_new(&todofuken()).unwrap();
+        for word in ["わかやまけん", "わかやまけんあ", "wakayamaken"] {
+            assert!(!query(word.to_string(), &dict, &RegexOperator::Default).is_empty());
+        }
+        let key: Vec<u16> = "わかやまけん".encode_utf16().collect();
+        let _ = dict.search(&key).count();
+    }
+
+    #[test]
+    fn corrupted_dictionary_never_panics() {
+        use crate::migemo::query::query;
+        use crate::migemo::regex_generator::RegexOperator;
+        let buf = todofuken();
+        for i in 0..buf.len() {
+            for x in [0x01u8, 0x80, 0xff] {
+                let mut corrupted = buf.clone();
+                corrupted[i] ^= x;
+                if let Ok(dict) = CompactDictionary::try_new(&corrupted) {
+                    for word in ["o", "ky", "wakayamaken"] {
+                        let _ = query(word.to_string(), &dict, &RegexOperator::Default);
+                    }
+                }
+            }
         }
     }
 }
